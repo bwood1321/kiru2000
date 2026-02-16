@@ -362,29 +362,3 @@
 2026-02-16 08:56:46,095|INFO|Loaded 25 condition IDs for redemption
 2026-02-16 08:56:48,465|INFO|Auth OK type=1 funder=0xF9b8c919b97CbD5eb1d71b23B9915Df711860694
 2026-02-16 08:56:48,619|INFO|Updated STARTING_BALANCE to $398.38
-2026-02-16 09:10:03,246|INFO|MARKET ORDER: $17.37 NO id=0x1a987eaeee0bf0c0b0aa7974996099233d3ec890c718d3be5f0d6f9663ab9a0f st=matched shares=78.954544
-2026-02-16 09:12:51,132|INFO|MARKET ORDER: $12.50 NO id=0xf7ae6b222a6b1e40fab4cccaa38bfb80ced7ccc794d4cb78bbf105d6c7c86146 st=matched shares=89.695
-2026-02-16 09:28:37,832|DEBUG|Cleanup: removed 1 old positions, 0 stale confirms
-2026-02-16 09:52:15,679|DEBUG|Redeem check fail: {'code': -32090, 'message': 'Too many requests, reason: call rate limit exhausted, retry in 10s', 'data': {'trace_id': 'e2b96300a6d50dccb368979b4e822fc5'}}
-2026-02-16 09:53:29,764|INFO|MARKET ORDER: $56.03 NO id=0x99e9917d3633c05fb35148264d200510f7604537210fa0d2b4dd8a07a49ecfc8 st=matched shares=266.809522
-2026-02-16 09:53:31,247|INFO|MARKET ORDER: $18.68 NO id=0x831e23b5e9cedfcddf9d98b283d514f623af319681b826eca827deb7d51cd28b st=matched shares=88.952379
-2026-02-16 09:54:05,471|INFO|MARKET ORDER: $28.02 NO id=0x92f183d0a7b1e6d272dad1b95454ee60a1bc3fc25f41773fe5909899c22422e8 st=matched shares=186.8
-2026-02-16 09:56:36,618|INFO|MARKET ORDER: $43.61 NO id=0x1658253914125300b672440263cb70b55fdbf3c0798e5ec7f8abb60ef340c4b6 st=matched shares=374.915832
-2026-02-16 09:57:47,149|DEBUG|Redeem check fail: {'code': -32090, 'message': 'Too many requests, reason: call rate limit exhausted, retry in 10s', 'data': {'trace_id': '2b345ac22a1a1a2b254ae995277b54f2'}}
-2026-02-16 09:58:21,285|DEBUG|Cleanup: removed 2 old positions, 0 stale confirms
-2026-02-16 10:08:34,936|INFO|MARKET ORDER: $50.76 NO id=0xd14482352a52b47d66d04b3361023871a8625280bdbcb4256ccf1ab40d08fbe8 st=matched shares=241.8
-2026-02-16 10:09:26,135|INFO|MARKET ORDER: $16.92 NO id=0xd307f58c428dda0d8686972a806200990ec2a0afab37d5935ec4e4ff173ddd9b st=matched shares=94.144443
-2026-02-16 10:12:00,982|INFO|MARKET ORDER: $40.27 NO id=0x5efe48619f6c5c4f86ab4bb3362dfeb3bbb84871cd9779845bdbf8dfe7a3fde8 st=matched shares=671.166665
-2026-02-16 10:15:55,546|INFO|Loaded 20 historical trades for adaptive sizing
-2026-02-16 10:15:55,569|INFO|Loaded 28 condition IDs for redemption
-2026-02-16 10:15:57,881|INFO|Auth OK type=1 funder=0xF9b8c919b97CbD5eb1d71b23B9915Df711860694
-2026-02-16 10:15:58,045|INFO|Updated STARTING_BALANCE to $1302.12
-2026-02-16 10:21:09,719|DEBUG|Redeem check fail: {'code': -32090, 'message': 'Too many requests, reason: call rate limit exhausted, retry in 10s', 'data': {'trace_id': '91a20aa07a01821f7c63d189104c8067'}}
-2026-02-16 10:26:33,007|DEBUG|Redeem check fail: {'code': -32090, 'message': 'Too many requests, reason: call rate limit exhausted, retry in 10s', 'data': {'trace_id': 'c13c4c34dfa157770f61927e05c41a7f'}}
-2026-02-16 10:31:40,678|DEBUG|Redeem check fail: {'code': -32090, 'message': 'Too many requests, reason: call rate limit exhausted, retry in 10s', 'data': {'trace_id': 'bc698fd276a581363efb6a98eda47e08'}}
-2026-02-16 10:34:48,320|INFO|MARKET ORDER: $21.87 YES id=0xd9e8c46b679b36f5a2b52065a1fae950dfdc5b12894ca1c3e0eff41695f2d153 st=matched shares=81.0
-2026-02-16 10:40:58,659|INFO|MARKET ORDER: $38.41 YES id=0x0b557917e563d2789add3919bacc4816a82100d0cf004c06bff0af4880579a6a st=matched shares=365.636362
-2026-02-16 10:41:16,556|INFO|MARKET ORDER: $190.41 YES id=0x9e9cbc3cce495c2403415e3df2f4e2f75aeca212403482e6641a215bc0269388 st=matched shares=854.578694
-2026-02-16 10:48:28,290|DEBUG|Redeem check fail: {'code': -32090, 'message': 'Too many requests, reason: call rate limit exhausted, retry in 10s', 'data': {'trace_id': '18f4259b0088bd5d1d303c5d2f4ab8f0'}}
-2026-02-16 10:48:33,753|DEBUG|Redeem check fail: ('execution reverted: Too many requests, reason: call rate limit exhausted, retry in 10s', {'trace_id': 'b1e68eb1f69a0356dd663b47abe347d8'})
-2026-02-16 11:05:14,604|DEBUG|Redeem check fail: {'code': -32090, 'message': 'Too many requests, reason: call rate limit exhausted, retry in 10s', 'data': {'trace_id': 'a16bcd13a80d4fbff98c57b7f4b228a7'}}

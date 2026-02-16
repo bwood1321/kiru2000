@@ -1,0 +1,4 @@
+timestamp,market_slug,strategy,side,entry_price,shares,cost,pnl,won,regime,trend_dir,trend_strength,volatility,btc_price_entry,btc_price_exit,btc_chg_1m,btc_chg_5m,market_time_left_sec,conviction_count,conviction_bonus,streak_mult,tod_mult,hour_utc,fill_time_ms,order_type
+2026-02-16 16:34:48,btc-updown-15m-1771259400,FLASH,YES,0.2750,81.00,21.88,57.50,1,TRENDING_UP,1,0.851,0.002313,67683.06,67931.08,0.0458,0.1736,-294,3,1.80,1.00,1.00,16,0,market
+2026-02-16 16:40:58,btc-updown-15m-1771259400,SQUEEZE,YES,0.0950,365.64,38.41,319.91,1,TRENDING_UP,1,0.851,0.002313,67671.72,67931.08,0.0458,0.1736,-294,3,1.80,1.00,1.00,16,0,market
+2026-02-16 16:41:16,btc-updown-15m-1771259400,LATENCY,YES,0.2150,854.58,190.41,647.08,1,TRENDING_UP,1,0.851,0.002313,67737.75,67931.08,0.0458,0.1736,-294,3,1.80,1.20,1.00,16,0,market
