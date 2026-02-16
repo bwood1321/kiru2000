@@ -1,0 +1,89 @@
+2026-02-15 06:33:02,457|INFO|Auth OK type=1 funder=0xF9b8c919b97CbD5eb1d71b23B9915Df711860694
+2026-02-15 06:37:06,050|INFO|MARKET ORDER: $2.00 YES id=0xd7b09d3fc9cc53d091a57c05d83cbde9400487b08962e75cb3cad991e6249f80 st=matched
+2026-02-15 06:48:08,065|ERROR|Market order fail: PolyApiException[status_code=400, error_message={'error': "order couldn't be fully filled. FOK orders are fully filled or killed."}]
+2026-02-15 06:48:08,497|INFO|LIMIT ORDER: $1.89 YES (7.02sh @ $0.27) id=0x5974f3ce6e57d0a57228e25efb1d3d559d32c04555d232ca87f4020ef4b5aa5a st=live
+2026-02-15 06:49:39,436|DEBUG|Redeem fail: {'code': -32090, 'message': 'Too many requests, reason: call rate limit exhausted, retry in 10s', 'data': {'trace_id': '150f44eee8a7b043ec414825e3d4a2c7'}}
+2026-02-15 06:49:57,472|INFO|MARKET ORDER: $5.00 YES id=0x913f5528eaa0871c8bfa37ea220c1f90034f5381b9245e718fcf0168869a2a0c st=matched
+2026-02-15 06:57:53,462|DEBUG|Redeem fail: {'code': -32090, 'message': 'Too many requests, reason: call rate limit exhausted, retry in 10s', 'data': {'trace_id': 'cfd3fc57aa0d45886e5b3975975df054'}}
+2026-02-15 07:00:26,994|INFO|MARKET ORDER: $2.00 NO id=0x7744270271f72762b4a063a221743f579fc274cd148b56dd068665a80e06d664 st=matched
+2026-02-15 07:06:23,024|DEBUG|Redeem fail: {'code': -32090, 'message': 'Too many requests, reason: call rate limit exhausted, retry in 10s', 'data': {'trace_id': 'd168f83716e65e8b4b246adfaf8860e4'}}
+2026-02-15 07:06:24,338|DEBUG|Redeem fail: {'code': -32090, 'message': 'Too many requests, reason: call rate limit exhausted, retry in 10s', 'data': {'trace_id': 'dfb6b3bdcc178ba9e9e10e7c5d575981'}}
+2026-02-15 07:06:58,399|INFO|MARKET ORDER: $2.00 NO id=0x31570166cf2a5e437d52ad7e64a147174aa112101dc4bc6ef30de0bc6d50e84c st=matched
+2026-02-15 07:14:48,410|DEBUG|Redeem fail: {'code': -32090, 'message': 'Too many requests, reason: call rate limit exhausted, retry in 10s', 'data': {'trace_id': '01587e932c51ab135535200cc5101502'}}
+2026-02-15 07:14:51,721|DEBUG|Redeem fail: {'code': -32000, 'message': 'replacement transaction underpriced'}
+2026-02-15 07:18:48,737|INFO|Auth OK type=1 funder=0xF9b8c919b97CbD5eb1d71b23B9915Df711860694
+2026-02-15 07:18:54,468|INFO|Synced existing position: NO 37.9 shares @ $0.1813 (btc-updown-15m-1771129800)
+2026-02-15 07:18:54,468|INFO|Synced existing position: NO 35.9 shares @ $0.1940 (btc-updown-15m-1771128000)
+2026-02-15 07:18:54,468|INFO|Synced existing position: NO 26.9 shares @ $0.2578 (btc-updown-15m-1771140600)
+2026-02-15 07:18:54,468|INFO|Synced existing position: YES 26.3 shares @ $0.1741 (btc-updown-15m-1771144200)
+2026-02-15 07:18:54,468|INFO|Synced existing position: YES 24.5 shares @ $0.2793 (btc-updown-15m-1771159500)
+2026-02-15 07:18:54,468|INFO|Synced existing position: NO 23.1 shares @ $0.2949 (btc-updown-15m-1771139700)
+2026-02-15 07:18:54,468|INFO|Synced existing position: YES 21.9 shares @ $0.1819 (btc-updown-15m-1771128900)
+2026-02-15 07:18:54,468|INFO|Synced existing position: NO 21.3 shares @ $0.3247 (btc-updown-15m-1771141500)
+2026-02-15 07:18:54,468|INFO|Synced existing position: YES 18.0 shares @ $0.2115 (btc-updown-15m-1771120800)
+2026-02-15 07:18:54,468|INFO|Synced existing position: NO 17.9 shares @ $0.2221 (btc-updown-15m-1771119900)
+2026-02-15 07:18:54,468|INFO|Synced existing position: NO 15.3 shares @ $0.2596 (btc-updown-15m-1771160400)
+2026-02-15 07:18:54,468|INFO|Synced existing position: NO 13.6 shares @ $0.2899 (btc-updown-15m-1771131600)
+2026-02-15 07:18:54,469|INFO|Synced existing position: NO 11.7 shares @ $0.1699 (btc-updown-15m-1771127100)
+2026-02-15 07:18:54,469|INFO|Synced existing position: YES 8.6 shares @ $0.2299 (btc-updown-15m-1771158600)
+2026-02-15 07:18:54,469|INFO|Synced existing position: NO 8.5 shares @ $0.2200 (btc-updown-15m-1771146000)
+2026-02-15 07:18:54,469|INFO|Synced existing position: YES 7.6 shares @ $0.2599 (btc-updown-15m-1771118100)
+2026-02-15 07:18:54,469|INFO|Synced existing position: NO 6.8 shares @ $0.2899 (btc-updown-15m-1771133400)
+2026-02-15 07:18:54,469|INFO|Synced existing position: NO 6.6 shares @ $0.2990 (btc-updown-15m-1771145100)
+2026-02-15 07:18:54,469|INFO|Synced existing position: NO 2.7 shares @ $0.3599 (btc-updown-15m-1771114500)
+2026-02-15 07:18:54,469|INFO|Synced existing position: YES 2.2 shares @ $0.4499 (btc-updown-15m-1771113600)
+2026-02-15 07:22:41,630|INFO|MARKET ORDER: $2.00 YES id=0x68dcdf763fc1a42d67d3354ac66dbb0c2cc1aca3fed4a10f96c0fb928c1f48a8 st=matched shares=6.666665
+2026-02-15 07:28:54,653|INFO|Auth OK type=1 funder=0xF9b8c919b97CbD5eb1d71b23B9915Df711860694
+2026-02-15 07:29:00,136|INFO|Synced existing position: NO 37.9 shares @ $0.1813 (btc-updown-15m-1771129800)
+2026-02-15 07:29:00,136|INFO|Synced existing position: NO 35.9 shares @ $0.1940 (btc-updown-15m-1771128000)
+2026-02-15 07:29:00,136|INFO|Synced existing position: NO 26.9 shares @ $0.2578 (btc-updown-15m-1771140600)
+2026-02-15 07:29:00,136|INFO|Synced existing position: YES 26.3 shares @ $0.1741 (btc-updown-15m-1771144200)
+2026-02-15 07:29:00,136|INFO|Synced existing position: YES 24.5 shares @ $0.2793 (btc-updown-15m-1771159500)
+2026-02-15 07:29:00,136|INFO|Synced existing position: NO 23.1 shares @ $0.2949 (btc-updown-15m-1771139700)
+2026-02-15 07:29:00,136|INFO|Synced existing position: YES 21.9 shares @ $0.1819 (btc-updown-15m-1771128900)
+2026-02-15 07:29:00,136|INFO|Synced existing position: NO 21.3 shares @ $0.3247 (btc-updown-15m-1771141500)
+2026-02-15 07:29:00,136|INFO|Synced existing position: YES 18.0 shares @ $0.2115 (btc-updown-15m-1771120800)
+2026-02-15 07:29:00,136|INFO|Synced existing position: NO 17.9 shares @ $0.2221 (btc-updown-15m-1771119900)
+2026-02-15 07:29:00,137|INFO|Synced existing position: NO 15.3 shares @ $0.2596 (btc-updown-15m-1771160400)
+2026-02-15 07:29:00,137|INFO|Synced existing position: NO 13.6 shares @ $0.2899 (btc-updown-15m-1771131600)
+2026-02-15 07:29:00,137|INFO|Synced existing position: NO 11.7 shares @ $0.1699 (btc-updown-15m-1771127100)
+2026-02-15 07:29:00,137|INFO|Synced existing position: YES 8.6 shares @ $0.2299 (btc-updown-15m-1771158600)
+2026-02-15 07:29:00,137|INFO|Synced existing position: NO 8.5 shares @ $0.2200 (btc-updown-15m-1771146000)
+2026-02-15 07:29:00,137|INFO|Synced existing position: YES 7.6 shares @ $0.2599 (btc-updown-15m-1771118100)
+2026-02-15 07:29:00,137|INFO|Synced existing position: NO 6.8 shares @ $0.2899 (btc-updown-15m-1771133400)
+2026-02-15 07:29:00,137|INFO|Synced existing position: NO 6.6 shares @ $0.2990 (btc-updown-15m-1771145100)
+2026-02-15 07:29:00,137|INFO|Synced existing position: YES 6.6 shares @ $0.2999 (btc-updown-15m-1771161300)
+2026-02-15 07:29:00,137|INFO|Synced existing position: NO 2.7 shares @ $0.3599 (btc-updown-15m-1771114500)
+2026-02-15 07:29:00,137|INFO|Synced existing position: YES 2.2 shares @ $0.4499 (btc-updown-15m-1771113600)
+2026-02-15 07:33:52,239|INFO|Auth OK type=1 funder=0xF9b8c919b97CbD5eb1d71b23B9915Df711860694
+2026-02-15 07:33:57,865|INFO|Synced existing position: NO 37.9 shares @ $0.1813 (btc-updown-15m-1771129800)
+2026-02-15 07:33:57,866|INFO|Synced existing position: NO 35.9 shares @ $0.1940 (btc-updown-15m-1771128000)
+2026-02-15 07:33:57,866|INFO|Synced existing position: NO 26.9 shares @ $0.2578 (btc-updown-15m-1771140600)
+2026-02-15 07:33:57,866|INFO|Synced existing position: YES 26.3 shares @ $0.1741 (btc-updown-15m-1771144200)
+2026-02-15 07:33:57,866|INFO|Synced existing position: YES 24.5 shares @ $0.2793 (btc-updown-15m-1771159500)
+2026-02-15 07:33:57,866|INFO|Synced existing position: NO 23.1 shares @ $0.2949 (btc-updown-15m-1771139700)
+2026-02-15 07:33:57,866|INFO|Synced existing position: YES 21.9 shares @ $0.1819 (btc-updown-15m-1771128900)
+2026-02-15 07:33:57,866|INFO|Synced existing position: NO 21.3 shares @ $0.3247 (btc-updown-15m-1771141500)
+2026-02-15 07:33:57,866|INFO|Synced existing position: YES 18.0 shares @ $0.2115 (btc-updown-15m-1771120800)
+2026-02-15 07:33:57,866|INFO|Synced existing position: NO 17.9 shares @ $0.2221 (btc-updown-15m-1771119900)
+2026-02-15 07:33:57,866|INFO|Synced existing position: NO 15.3 shares @ $0.2596 (btc-updown-15m-1771160400)
+2026-02-15 07:33:57,866|INFO|Synced existing position: NO 13.6 shares @ $0.2899 (btc-updown-15m-1771131600)
+2026-02-15 07:33:57,866|INFO|Synced existing position: NO 11.7 shares @ $0.1699 (btc-updown-15m-1771127100)
+2026-02-15 07:33:57,866|INFO|Synced existing position: YES 8.6 shares @ $0.2299 (btc-updown-15m-1771158600)
+2026-02-15 07:33:57,866|INFO|Synced existing position: NO 8.5 shares @ $0.2200 (btc-updown-15m-1771146000)
+2026-02-15 07:33:57,866|INFO|Synced existing position: YES 7.6 shares @ $0.2599 (btc-updown-15m-1771118100)
+2026-02-15 07:33:57,866|INFO|Synced existing position: NO 6.8 shares @ $0.2899 (btc-updown-15m-1771133400)
+2026-02-15 07:33:57,866|INFO|Synced existing position: NO 6.6 shares @ $0.2990 (btc-updown-15m-1771145100)
+2026-02-15 07:33:57,866|INFO|Synced existing position: YES 6.6 shares @ $0.2999 (btc-updown-15m-1771161300)
+2026-02-15 07:33:57,866|INFO|Synced existing position: NO 2.7 shares @ $0.3599 (btc-updown-15m-1771114500)
+2026-02-15 07:33:57,867|INFO|Synced existing position: YES 2.2 shares @ $0.4499 (btc-updown-15m-1771113600)
+2026-02-15 07:37:36,512|INFO|Auth OK type=1 funder=0xF9b8c919b97CbD5eb1d71b23B9915Df711860694
+2026-02-15 07:40:57,022|ERROR|Market order fail: PolyApiException[status_code=400, error_message={'error': "order couldn't be fully filled. FOK orders are fully filled or killed."}]
+2026-02-15 07:40:57,367|INFO|LIMIT ORDER: $4.82 YES (11.76sh @ $0.41) id=0xceb80735055acf86a9b2d94ccca236f3038d1219113114770568ffaa00c70d9d st=live
+2026-02-15 07:43:13,528|INFO|MARKET ORDER: $5.00 NO id=0xd6a4d6d03c1016c992eb5811ded1b8ed6340b9e001e24c8112b047b91ad268bf st=matched shares=14.705881
+2026-02-15 07:47:01,083|INFO|MARKET ORDER: $5.00 NO id=0x7fe96555ebc57bfdf9205731d4ac52030a5973cc43c0677408134f598a175bef st=matched shares=17.241378
+2026-02-15 07:47:57,969|INFO|MARKET ORDER: $2.00 NO id=0xaf1754fd69ef3cc3eebcec592486436394a5c685912a3a72e7accc88f317539e st=matched shares=8.368025
+2026-02-15 12:01:32,649|INFO|Auth OK type=1 funder=0xF9b8c919b97CbD5eb1d71b23B9915Df711860694
+2026-02-15 16:19:34,180|INFO|Auth OK type=1 funder=0xF9b8c919b97CbD5eb1d71b23B9915Df711860694
+2026-02-15 16:20:24,967|INFO|MARKET ORDER: $2.00 NO id=0xc837aba9b567300adf008780a7a3df225b73d229c5e441e163dd459b0c54fc44 st=matched shares=6.451611
+2026-02-15 16:22:35,608|INFO|MARKET ORDER: $2.00 NO id=0xa2b7fe201fca51900caf9cb2035dc36cc00c2ae8468b974445008aa0b7dd084d st=matched shares=8.0
