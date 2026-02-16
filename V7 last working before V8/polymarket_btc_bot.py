@@ -1,20 +1,16 @@
 """
-POLYMARKET BTC BOT v8 — MARKET INTELLIGENCE ENGINE
-Built on v7.2 proven architecture + 5 major upgrades.
+POLYMARKET BTC BOT v7 — CONVICTION ENGINE
+Built on v6.2 proven architecture + new intelligence upgrades.
 
-NEW IN v8 (from v7.2):
-1. Mean Reversion — replaces dead Momentum. Detects overextended moves + buys the bounce.
-2. Order Book Intelligence — reads Polymarket book for whale bids, imbalance, wall detection.
-3. Smarter Flash — order book filter + volatility gate + price velocity check.
-4. Token Price Feed — tracks Polymarket prices as time series for divergence signals.
-5. Per-Market Loss Limit — stops trading a market after 2 losses on it.
-
-v7.2 protections carried forward:
-- Hard counter-trend block (0% WR trades eliminated)
-- 30-second entry gap (pile-in prevention)
-- 10% hard size cap (multiplier stacking protection)  
-- 3-minute minimum for directional strategies
-- Latency/Momentum min entry $0.12 (no fighting 88%+ consensus)
+NEW IN v7 (from v6.2):
+1. Confirmation Stacking Bonus — 1.5x size when 2+ strategies agree
+2. Regime Momentum Guard — blocks counter-trend in sustained trends
+3. Win Streak Sizing — 20-30% boost after 3+ consecutive wins
+4. Breakout Fast Entry — lower latency threshold during BREAKOUT regime
+5. Smart Exit — sell losing positions early instead of holding to expiry
+6. Time-of-Day Sizing — boost/reduce based on hourly profitability
+7. Smarter Redeem — only after wins, with proper backoff
+8. Flash/Squeeze regime block (from v6.2 fix)
 
 pip install py-clob-client python-dotenv requests numpy colorama web3
 """
@@ -95,7 +91,7 @@ class Config:
     def get_base_size(s, strat, balance):
         """Get base trade size — percentage of balance or fixed fallback."""
         pct_map = {"ARB": s.arb_pct, "LATENCY": s.latency_pct,
-                   "MOMENTUM": s.momentum_pct, "MEANREV": s.momentum_pct, "FLASH": s.flash_pct,
+                   "MOMENTUM": s.momentum_pct, "FLASH": s.flash_pct,
                    "SQUEEZE": s.squeeze_pct}
         fixed_map = {"ARB": s.arb_size, "LATENCY": s.latency_size,
                      "MOMENTUM": s.momentum_size, "FLASH": s.flash_size}
@@ -335,8 +331,8 @@ class TrendEngine:
                 return True, 1.3 if with_trend else 0.3
             return True, 0.7
 
-        # MEANREV/SQUEEZE: needs some directional signal, but don't fully block in FLAT
-        if strat in ("MOMENTUM", "MEANREV", "SQUEEZE"):
+        # MOMENTUM/SQUEEZE: needs some directional signal, but don't fully block in FLAT
+        if strat in ("MOMENTUM", "SQUEEZE"):
             if s.regime == "FLAT": return True, 0.5  # was blocked, now allowed at half size
             if s.regime == "CHOPPY": return False, 0.0  # still too risky in chop
             if s.regime in ("TRENDING_UP", "TRENDING_DOWN"):
@@ -387,9 +383,9 @@ class AdaptiveSizer:
     def __init__(s, c):
         s.c = c
         s.history = []          # all trade records
-        s.multipliers = {"ARB": 1.0, "LATENCY": 1.0, "MEANREV": 1.0, "FLASH": 1.0, "SQUEEZE": 1.0}
-        s.paused_until = {"ARB": 0, "LATENCY": 0, "MEANREV": 0, "FLASH": 0, "SQUEEZE": 0}
-        s.streaks = {"ARB": 0, "LATENCY": 0, "MEANREV": 0, "FLASH": 0, "SQUEEZE": 0}  # negative = losses
+        s.multipliers = {"ARB": 1.0, "LATENCY": 1.0, "MOMENTUM": 1.0, "FLASH": 1.0, "SQUEEZE": 1.0}
+        s.paused_until = {"ARB": 0, "LATENCY": 0, "MOMENTUM": 0, "FLASH": 0, "SQUEEZE": 0}
+        s.streaks = {"ARB": 0, "LATENCY": 0, "MOMENTUM": 0, "FLASH": 0, "SQUEEZE": 0}  # negative = losses
         s.side_streaks = {"YES": 0, "NO": 0}  # track per-side streaks
         s.hourly_stats = {}     # {hour: {wins, losses, pnl}}
         s._load()
@@ -443,7 +439,7 @@ class AdaptiveSizer:
     def _recalculate(s):
         """Recalculate size multipliers from history."""
         if len(s.history) < s.c.min_trades_to_adapt: return
-        for strat in ["ARB", "LATENCY", "MEANREV", "FLASH", "SQUEEZE"]:
+        for strat in ["ARB", "LATENCY", "MOMENTUM", "FLASH", "SQUEEZE"]:
             # Use last 30 trades for this strategy
             recent = [t for t in s.history if t["strat"] == strat][-30:]
             if len(recent) < 5:
@@ -511,7 +507,7 @@ class AdaptiveSizer:
 
     def display_str(s):
         parts = []
-        for strat in ["ARB", "LATENCY", "MEANREV", "FLASH", "SQUEEZE"]:
+        for strat in ["ARB", "LATENCY", "MOMENTUM", "FLASH", "SQUEEZE"]:
             m = s.multipliers[strat]
             if s.is_paused(strat):
                 parts.append(f"{strat[:3]}:PAUSED")
@@ -670,223 +666,6 @@ class WinStreakSizer:
         if s.global_streak >= 3: return f"🔥{s.global_streak}W"
         if s.global_streak <= -3: return f"❄️{abs(s.global_streak)}L"
         return f"streak:{s.global_streak:+d}"
-
-
-# ═══════════════════════════════════════════════════════════════
-# ─── v8: TOKEN PRICE FEED ───
-# ═══════════════════════════════════════════════════════════════
-class TokenFeed:
-    """Tracks Polymarket YES/NO prices as a time series.
-    Enables: divergence detection, token momentum, smart money signals.
-    Updated every time prices are fetched (every 5 ticks = 10 seconds)."""
-    def __init__(s):
-        s.data = deque(maxlen=200)   # ~30 min of 10-sec samples
-        s._current_slug = None
-
-    def update(s, slug, yes_p, no_p):
-        """Record a new price snapshot."""
-        if slug != s._current_slug:
-            s.data.clear()
-            s._current_slug = slug
-        s.data.append({"t": time.time(), "yes": yes_p, "no": no_p})
-
-    @property
-    def n(s): return len(s.data)
-
-    def token_chg(s, side, sec=30):
-        """Price change for YES or NO token over last N seconds."""
-        if len(s.data) < 3: return 0
-        key = "yes" if side == "YES" else "no"
-        now = s.data[-1]
-        cut = now["t"] - sec
-        old = s.data[0]
-        for p in s.data:
-            if p["t"] >= cut: old = p; break
-        if old[key] <= 0: return 0
-        return (now[key] - old[key]) / old[key]
-
-    def token_velocity(s, side, sec=20):
-        """Rate of price change (acceleration). Positive = price rising faster."""
-        if len(s.data) < 6: return 0
-        key = "yes" if side == "YES" else "no"
-        prices = [(d[key], d["t"]) for d in s.data if d["t"] >= time.time() - sec]
-        if len(prices) < 4: return 0
-        mid = len(prices) // 2
-        first_half = [p for p, _ in prices[:mid]]
-        second_half = [p for p, _ in prices[mid:]]
-        if not first_half or not second_half: return 0
-        chg1 = (first_half[-1] - first_half[0]) if len(first_half) > 1 else 0
-        chg2 = (second_half[-1] - second_half[0]) if len(second_half) > 1 else 0
-        return chg2 - chg1  # positive = accelerating up, negative = accelerating down
-
-    def divergence(s, btc_feed, sec=60):
-        """Detect divergence between BTC direction and token movement.
-        Returns: +1 if BTC up but YES dropping (bearish divergence)
-                 -1 if BTC down but NO dropping (bullish divergence)
-                  0 if no divergence"""
-        if len(s.data) < 5 or btc_feed.n < 15: return 0
-        btc_chg = btc_feed.chg(sec)
-        yes_chg = s.token_chg("YES", sec)
-        # BTC going up but YES not following = market doesn't believe the move
-        if btc_chg > 0.0005 and yes_chg < -0.02: return 1   # bearish divergence
-        # BTC going down but NO not following
-        if btc_chg < -0.0005:
-            no_chg = s.token_chg("NO", sec)
-            if no_chg < -0.02: return -1  # bullish divergence
-        return 0
-
-    def smart_money(s, sec=30):
-        """Detect if tokens are moving without BTC cause.
-        Returns: ('YES', strength) or ('NO', strength) or (None, 0)"""
-        if len(s.data) < 5: return None, 0
-        yes_chg = abs(s.token_chg("YES", sec))
-        no_chg = abs(s.token_chg("NO", sec))
-        # If YES is moving a lot (>3%) without context, someone knows something
-        if yes_chg > 0.03:
-            return "YES", yes_chg
-        if no_chg > 0.03:
-            return "NO", no_chg
-        return None, 0
-
-    def display_str(s):
-        if len(s.data) < 3: return "warming"
-        yc = s.token_chg("YES", 30) * 100
-        nc = s.token_chg("NO", 30) * 100
-        return f"Y:{yc:+.1f}% N:{nc:+.1f}%"
-
-
-# ═══════════════════════════════════════════════════════════════
-# ─── v8: ORDER BOOK INTELLIGENCE ───
-# ═══════════════════════════════════════════════════════════════
-class OrderBookIntel:
-    """Reads the Polymarket order book for actionable intelligence.
-    Detects: whale bids, book imbalance, support/resistance walls.
-    Updated every time we fetch order books (~every 10 seconds)."""
-
-    def __init__(s):
-        s.yes_bid_depth = 0.0    # total $ on YES bid side (top 5 levels)
-        s.yes_ask_depth = 0.0    # total $ on YES ask side
-        s.no_bid_depth = 0.0
-        s.no_ask_depth = 0.0
-        s.yes_imbalance = 0.0    # >1 = more buyers, <1 = more sellers
-        s.no_imbalance = 0.0
-        s.whale_side = None      # "YES" or "NO" or None
-        s.whale_size = 0.0       # dollar amount of whale order
-        s.whale_price = 0.0
-        s._last_update = 0
-
-    def update(s, executor, market):
-        """Fetch and analyze both order books. Call every 10-20 seconds."""
-        if time.time() - s._last_update < 8: return  # rate limit
-        s._last_update = time.time()
-        if not executor.client or not executor.authed: return
-
-        try:
-            ybook = executor.client.get_order_book(market.tok_yes)
-            nbook = executor.client.get_order_book(market.tok_no)
-            s._analyze_book(ybook, "YES")
-            s._analyze_book(nbook, "NO")
-        except:
-            pass
-
-    def _analyze_book(s, book, side):
-        """Analyze one side's order book."""
-        if not isinstance(book, dict): return
-        bids = book.get("bids", [])
-        asks = book.get("asks", [])
-
-        # Calculate depth (top 5 levels)
-        bid_depth = sum(float(b.get("size", 0)) * float(b.get("price", 0)) for b in bids[:5])
-        ask_depth = sum(float(a.get("size", 0)) * float(a.get("price", 0)) for a in asks[:5])
-
-        if side == "YES":
-            s.yes_bid_depth = bid_depth
-            s.yes_ask_depth = ask_depth
-            s.yes_imbalance = bid_depth / ask_depth if ask_depth > 0 else 2.0
-        else:
-            s.no_bid_depth = bid_depth
-            s.no_ask_depth = ask_depth
-            s.no_imbalance = bid_depth / ask_depth if ask_depth > 0 else 2.0
-
-        # Whale detection: single order > $200 in top 3 levels
-        for bid in bids[:3]:
-            order_size = float(bid.get("size", 0)) * float(bid.get("price", 0))
-            if order_size > 200:
-                if s.whale_side is None or order_size > s.whale_size:
-                    s.whale_side = side
-                    s.whale_size = order_size
-                    s.whale_price = float(bid.get("price", 0))
-
-    def get_imbalance(s, side):
-        """Returns imbalance ratio. >1.5 = strong buy pressure, <0.5 = sell pressure."""
-        return s.yes_imbalance if side == "YES" else s.no_imbalance
-
-    def has_support(s, side, min_depth=50.0):
-        """Is there meaningful bid support for this side?"""
-        depth = s.yes_bid_depth if side == "YES" else s.no_bid_depth
-        return depth >= min_depth
-
-    def selling_pressure(s, side):
-        """Is there heavy selling on this side? (thick ask wall)"""
-        ask = s.yes_ask_depth if side == "YES" else s.no_ask_depth
-        bid = s.yes_bid_depth if side == "YES" else s.no_bid_depth
-        if bid <= 0: return True
-        return ask / bid > 2.5  # asks 2.5x bigger than bids = heavy selling
-
-    def display_str(s):
-        parts = []
-        if s.yes_bid_depth > 0:
-            parts.append(f"Y:{s.yes_imbalance:.1f}x")
-        if s.no_bid_depth > 0:
-            parts.append(f"N:{s.no_imbalance:.1f}x")
-        if s.whale_side:
-            parts.append(f"🐋{s.whale_side}${s.whale_size:.0f}")
-        return " ".join(parts) if parts else "book:--"
-
-
-# ═══════════════════════════════════════════════════════════════
-# ─── v8: PER-MARKET LOSS TRACKER ───
-# ═══════════════════════════════════════════════════════════════
-class MarketLossTracker:
-    """Tracks losses per 15-minute market window. If too many losses,
-    stops trading that market. Fresh start every new market.
-    
-    Rules:
-    - 1st loss on a market: reduce next trade size by 50%
-    - 2nd loss on a market: STOP trading this market entirely
-    - New market = clean slate"""
-
-    def __init__(s):
-        s._losses = {}     # {slug: loss_count}
-        s._current_slug = None
-
-    def record_loss(s, slug):
-        """Record a loss on this market."""
-        s._losses[slug] = s._losses.get(slug, 0) + 1
-
-    def get_penalty(s, slug):
-        """Returns size multiplier. 1.0 = normal, 0.5 = reduced, 0.0 = blocked."""
-        losses = s._losses.get(slug, 0)
-        if losses >= 2: return 0.0   # STOP — this market is bad
-        if losses >= 1: return 0.5   # reduce — first loss, be cautious
-        return 1.0                   # full size
-
-    def is_blocked(s, slug):
-        """Should we stop trading this market?"""
-        return s._losses.get(slug, 0) >= 2
-
-    def cleanup(s):
-        """Remove old entries (keep last 10)."""
-        if len(s._losses) > 10:
-            keys = list(s._losses.keys())
-            for k in keys[:-10]:
-                del s._losses[k]
-
-    def display_str(s, slug):
-        losses = s._losses.get(slug, 0)
-        if losses >= 2: return "⛔STOP"
-        if losses >= 1: return "⚠️-50%"
-        return "✓"
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -1108,120 +887,60 @@ class S_Latency:
                 "edge": edge, "pred": confidence, "p": target_price, "chg": chg, "sz": 0}
 
 
-class S_MeanReversion:
-    """v8: MEAN REVERSION — Detects overextended token moves and buys the bounce.
+class S_Momentum:
+    """BTC VELOCITY DETECTOR — Based on "Efficient Coder" bot (86% ROI).
+    Research: Bot monitored for large price drop within 3-second window.
+    Turned $1,000 into $1,869 in days. Key: detect BIG FAST moves.
     
-    Different from Flash: Flash buys cheap tokens. Mean Reversion buys the BOUNCE.
-    It waits for the drop to STOP (deceleration) before entering.
-    
-    Logic:
-    1. Token price dropped significantly in last 60-90 seconds (overextended)
-    2. The drop is SLOWING DOWN (velocity turning positive = deceleration)
-    3. BTC is not confirming the drop (divergence or flattening)
-    4. Order book shows bid support forming (buyers stepping in)
-    
-    Entry: $0.10-$0.35 range (wider than Flash — catches mid-range bounces)
-    R:R: 2-5x depending on entry
-    Expected WR: 35-45% (higher than Flash because we wait for confirmation)"""
-    
-    def __init__(s, c):
-        s.c = c
-        s._last_signal = 0
-        s.scores = {}
-    
-    def check(s, m, f, trend, token_feed, book_intel):
-        """Check for mean reversion setup. Needs token_feed and book_intel."""
-        if f.n < 20: return None
-        tl = (m.end - datetime.now(timezone.utc)).total_seconds()
-        if tl < 180: return None  # need 3+ min for the bounce to play out
-        
-        # Cooldown: 20 seconds between signals
-        if time.time() - s._last_signal < 20: return None
-        
-        # Check both sides for overextension
-        for side, is_yes, price in [("YES", True, m.yes_p), ("NO", False, m.no_p)]:
-            signal = s._check_side(side, is_yes, price, m, f, trend, token_feed, book_intel)
-            if signal:
-                s._last_signal = time.time()
-                return signal
-        
-        return None
-    
-    def _check_side(s, side, is_yes, price, m, f, trend, token_feed, book_intel):
-        """Check if one side is overextended and ready to bounce."""
-        # 1. Price must be in the bounce zone: $0.10-$0.35
-        if price < 0.10 or price > 0.35: return None
-        
-        # 2. Token must have DROPPED significantly recently
-        if token_feed.n < 5: return None
-        token_drop = token_feed.token_chg(side, 60)  # 1-min change
-        
-        # Need a meaningful drop: > 15% decline (e.g. $0.30 → $0.25)
-        if token_drop > -0.10: return None  # not overextended enough
-        
-        # 3. The drop must be DECELERATING (velocity turning positive)
-        velocity = token_feed.token_velocity(side, 30)
-        
-        # Velocity > 0 means: price was dropping but is now dropping LESS (or rising)
-        # This is the key signal — the selling is exhausting
-        if velocity < 0.001: return None  # still accelerating down, don't catch falling knife
-        
-        # 4. BTC should NOT be confirming the drop
-        btc_chg = f.chg(60)
-        if is_yes and btc_chg < -0.002: return None   # BTC still crashing, YES drop is justified
-        if not is_yes and btc_chg > 0.002: return None  # BTC still pumping, NO drop is justified
-        
-        # 5. Order book support check (if available)
-        book_ok = True
-        if book_intel and book_intel.yes_bid_depth > 0:  # book data available
-            if book_intel.selling_pressure(side):
-                book_ok = False  # heavy selling, don't buy the dip yet
-            imbalance = book_intel.get_imbalance(side)
-            if imbalance < 0.4:
-                book_ok = False  # sellers dominating, wait
-        
-        if not book_ok: return None
-        
-        # 6. Regime check: don't mean-revert against strong trends
-        regime = trend.regime if trend else ""
-        if is_yes and regime == "TRENDING_DOWN" and trend.trend_strength < -0.40:
-            return None  # strong downtrend, YES drop is real
-        if not is_yes and regime == "TRENDING_UP" and trend.trend_strength > 0.40:
-            return None  # strong uptrend, NO drop is real
-        
-        # Calculate confidence based on signal strength
-        drop_strength = min(abs(token_drop) * 5, 0.3)    # bigger drop = more overextended
-        velocity_bonus = min(velocity * 50, 0.2)          # faster deceleration = stronger bounce
-        conf = 0.55 + drop_strength + velocity_bonus
-        conf = min(conf, 0.90)
-        
-        s.scores = {
-            "drop": token_drop, "velocity": velocity,
-            "btc_chg": btc_chg, "conf": conf, "book_ok": book_ok
-        }
-        
-        return {
-            "s": "MEANREV", "dir": side, "yes": is_yes,
-            "price": price, "conf": conf,
-            "drop": token_drop, "velocity": velocity,
-            "sz": 0
-        }
+    Different from Latency: Latency catches 0.15% moves over 30-60s.
+    Velocity catches EXPLOSIVE moves: 0.25%+ in 6-10 seconds.
+    These are whale orders, liquidation cascades, news spikes.
+    They create massive Polymarket mispricing that lasts 5-15 seconds."""
+    def __init__(s, c): s.c = c; s.scores = {}
+    def check(s, m, f, trend):
+        if not s.c.momentum_enabled or f.n < 10: return None
+        # Check multiple fast windows
+        chg_6 = f.chg(6)    # 6 seconds (3 ticks)
+        chg_10 = f.chg(10)  # 10 seconds (5 ticks)
+        chg_20 = f.chg(20)  # 20 seconds (10 ticks)
+
+        # Find the fastest significant move
+        moves = [(6, chg_6), (10, chg_10), (20, chg_20)]
+        best_window, best_chg = max(moves, key=lambda x: abs(x[1]))
+
+        # Need meaningful move: scaled by window
+        thresholds = {6: 0.0015, 10: 0.0020, 20: 0.0025}
+        if abs(best_chg) < thresholds.get(best_window, 0.003): return None
+
+        up = best_chg > 0
+        target_price = m.yes_p if up else m.no_p
+
+        # Only buy when price is reasonable (same logic as Latency)
+        if target_price > 0.45 or target_price < 0.12: return None
+
+        # Velocity score
+        velocity = abs(best_chg) / (best_window / 2)
+        conf = min(0.95, 0.65 + velocity * 500)
+        s.scores = {"velocity": velocity, "chg": best_chg, "window": best_window}
+
+        return {"s": "MOMENTUM", "dir": "YES" if up else "NO", "yes": up,
+                "conf": conf, "comp": best_chg, "sig": s.scores, "rsi": 50, "sz": 0}
 
 
 class S_Flash:
-    """v8: SMART FLASH — Order book aware value buying.
+    """ACCUMULATOR — Gabagool-lite for small balances.
+    Research: gabagool buys YES when cheap, NO when cheap, at different
+    moments. With $1000+ you hedge both sides. With $48 we can't fully
+    hedge, but we can buy at extreme risk/reward (3.5:1+).
     
-    Upgrades from v7:
-    1. ORDER BOOK FILTER: Won't buy if sellers are dominating the book
-    2. VOLATILITY GATE: Prefers low-vol (mean reversion) over high-vol (chaos)
-    3. PRICE VELOCITY: Won't buy a token that's actively dropping. Waits for
-       the drop to slow down (second derivative turns positive).
-    4. DIVERGENCE BONUS: Extra confidence when BTC and token disagree
-    
-    Entry range: $0.08-$0.22 (3.5:1+ R:R)
-    Win rate target: 45%+ (up from 38% in v7)"""
+    Rules:
+    - Only buy ≤ $0.22 (risk $0.22, reward $0.78 = 3.5:1)  
+    - YES cheap → buy if BTC recovering or flat (not crashing more)
+    - NO cheap → buy if BTC pulling back or flat (not pumping more)
+    - Extreme value: < $0.15 → buy even if conditions aren't perfect
+    - Needs 3+ minutes left for price to move back"""
     def __init__(s, c): s.c = c
-    def check(s, m, f, trend, token_feed=None, book_intel=None):
+    def check(s, m, f, trend):
         if not s.c.flash_enabled or f.n < 10: return None
         yes_cheap = 0.08 <= m.yes_p <= 0.22
         no_cheap = 0.08 <= m.no_p <= 0.22
@@ -1232,57 +951,28 @@ class S_Flash:
         btc_chg = f.chg(120)  # 2-min direction
 
         # v6.2 FIX: Don't buy against a strong regime
+        # If TRENDING_UP or BREAKOUT with upward trend, don't buy NO
+        # If TRENDING_DOWN or BREAKOUT with downward trend, don't buy YES
         regime = trend.regime if trend else ""
         strong_up = regime in ("TRENDING_UP",) or (regime == "BREAKOUT" and trend.trend_dir > 0)
         strong_down = regime in ("TRENDING_DOWN",) or (regime == "BREAKOUT" and trend.trend_dir < 0)
 
-        # v8: VOLATILITY GATE — prefer low/normal volatility for mean reversion
-        vol_ok = True
-        if trend and trend.volatility_regime == "HIGH":
-            vol_ok = False  # too chaotic, skip unless extreme value
-
         # YES cheap → BTC dropped → buy YES if any sign of recovery
         if yes_cheap and not strong_down:
-            # v8: Order book filter — don't buy if sellers dominate
-            if book_intel and book_intel.yes_ask_depth > 0:
-                if book_intel.selling_pressure("YES"):
-                    return None  # thick sell wall, token will keep dropping
-
-            # v8: Price velocity — don't catch a falling knife
-            if token_feed and token_feed.n >= 5:
-                vel = token_feed.token_velocity("YES", 20)
-                if vel < -0.005:  # actively accelerating down
-                    return None  # wait for the drop to slow
-
             recovering = f.chg(30) > 0
             flat_enough = btc_chg > -0.02
             if recovering or (flat_enough and trend.trend_dir >= 0):
-                if vol_ok or m.yes_p <= 0.15:  # allow extreme value even in high vol
-                    return {"s": "FLASH", "dir": "YES", "yes": True, "price": m.yes_p, "sz": 0}
-
+                return {"s": "FLASH", "dir": "YES", "yes": True, "price": m.yes_p, "sz": 0}
             # Extreme value: $0.10-0.15 = great R:R, buy even if BTC still falling
             if 0.10 <= m.yes_p < 0.15 and flat_enough and not strong_down:
                 return {"s": "FLASH", "dir": "YES", "yes": True, "price": m.yes_p, "sz": 0}
 
         # NO cheap → BTC pumped → buy NO if any pullback
         if no_cheap and not strong_up:
-            # v8: Order book filter
-            if book_intel and book_intel.no_ask_depth > 0:
-                if book_intel.selling_pressure("NO"):
-                    return None
-
-            # v8: Price velocity
-            if token_feed and token_feed.n >= 5:
-                vel = token_feed.token_velocity("NO", 20)
-                if vel < -0.005:
-                    return None
-
             pulling_back = f.chg(30) < 0
             flat_enough = btc_chg < 0.02
             if pulling_back or (flat_enough and trend.trend_dir <= 0):
-                if vol_ok or m.no_p <= 0.15:
-                    return {"s": "FLASH", "dir": "NO", "yes": False, "price": m.no_p, "sz": 0}
-
+                return {"s": "FLASH", "dir": "NO", "yes": False, "price": m.no_p, "sz": 0}
             if 0.10 <= m.no_p < 0.15 and flat_enough and not strong_up:
                 return {"s": "FLASH", "dir": "NO", "yes": False, "price": m.no_p, "sz": 0}
 
@@ -1877,7 +1567,7 @@ class Dash:
 
         # ╔══ HEADER ══╗
         print(f"\n  {H1}╔{'═'*60}╗{R}")
-        print(f"  {H1}║  POLYMARKET BTC BOT v8             {DIM}{now}  ⏱ {rt}{R}  {H1}║{R}")
+        print(f"  {H1}║  POLYMARKET BTC BOT v7             {DIM}{now}  ⏱ {rt}{R}  {H1}║{R}")
         print(f"  {H1}╚{'═'*60}╝{R}")
 
         # ── CONNECTION STATUS (one clean line) ──
@@ -1926,7 +1616,7 @@ class Dash:
         print(f"\n  {H1}┌{'─'*60}┐{R}")
         print(f"  {H1}│{R}  {LBL}STRATEGIES{R}                                               {H1}│{R}")
         print(f"  {H1}├{'─'*60}┤{R}")
-        icons = {"ARB": "♦", "LATENCY": "⚡", "MEANREV": "↩", "FLASH": "⚡", "SQUEEZE": "◈"}
+        icons = {"ARB": "♦", "LATENCY": "⚡", "MOMENTUM": "↗", "FLASH": "⚡", "SQUEEZE": "◈"}
         for k, v in strats.items():
             ic = icons.get(k, "•")
             paused = sizer and sizer.is_paused(k)
@@ -2054,14 +1744,10 @@ class Bot:
         s.conviction = ConvictionEngine()
         s.momentum_guard = MomentumGuard()
         s.win_streak = WinStreakSizer()
-        # v8: Market intelligence
-        s.token_feed = TokenFeed()
-        s.book_intel = OrderBookIntel()
-        s.market_losses = MarketLossTracker()
         s.data = DataCollector()
         # Strategies
-        s.s1 = S_Arb(s.c); s.s2 = S_Latency(s.c); s.s3 = S_MeanReversion(s.c); s.s4 = S_Flash(s.c); s.s5 = S_Squeeze(s.c)
-        s.mkt = None; s.strats = {"ARB": "...", "LATENCY": "...", "MEANREV": "...", "FLASH": "...", "SQUEEZE": "..."}
+        s.s1 = S_Arb(s.c); s.s2 = S_Latency(s.c); s.s3 = S_Momentum(s.c); s.s4 = S_Flash(s.c); s.s5 = S_Squeeze(s.c)
+        s.mkt = None; s.strats = {"ARB": "...", "LATENCY": "...", "MOMENTUM": "...", "FLASH": "...", "SQUEEZE": "..."}
         s.cd = {}; s._traded_cids = set()
         s.start_time = time.time()
         s._logged_positions = set()
@@ -2124,7 +1810,7 @@ class Bot:
         s._past_trades = s._load_history()
         with open(s.HISTORY_FILE, "a") as f:
             f.write(f"\n{'='*60}\n")
-            f.write(f"  BOT v8 STARTED: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            f.write(f"  BOT v7 STARTED: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
             f.write(f"  Balance: ${s.risk.show_bal:.2f}\n")
             f.write(f"  Mode: {'LIVE' if not s.c.dry_run else 'DRY RUN'}\n")
             f.write(f"{'='*60}\n")
@@ -2190,7 +1876,7 @@ class Bot:
             w, l, wr = s.risk.stats()
             with open(s.HISTORY_FILE, "a") as f:
                 f.write(f"{'─'*60}\n")
-                f.write(f"  BOT v8 STOPPED: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+                f.write(f"  BOT v7 STOPPED: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
                 elapsed = int(time.time() - s.start_time)
                 hrs, rem = divmod(elapsed, 3600)
                 mins, secs = divmod(rem, 60)
@@ -2246,7 +1932,7 @@ class Bot:
 
     def run(s):
         os.system("cls" if os.name == "nt" else "clear")
-        print(f"\n  {H1}{'='*55}\n  |  POLYMARKET BTC BOT v8 — INTELLIGENT ENGINE\n  {'='*55}{R}\n")
+        print(f"\n  {H1}{'='*55}\n  |  POLYMARKET BTC BOT v7 — INTELLIGENT ENGINE\n  {'='*55}{R}\n")
         print(f"  {H2}[1/4]{R} Gamma..."); s.conn.gamma = "OK" if s.finder.test() else "FAILED"
         print(f"        {'OK' if s.conn.gamma == 'OK' else 'FAILED'}")
         print(f"  {H2}[2/4]{R} CLOB..."); s.conn.clob = "OK" if s.ex.test_public() else "FAILED"
@@ -2290,16 +1976,10 @@ class Bot:
         print(f"    Momentum Guard: {OK}Active{R} (blocks counter-trend after 3min)")
         print(f"    Win Streak Sizer: {OK}Active{R} (1.2-1.4x boost on 3-5+ wins)")
         print(f"    Time-of-Day Sizing: {OK}Active{R} (adjust by hourly performance)")
-        print(f"    {H2}v8 UPGRADES:{R}")
-        print(f"    Token Price Feed: {OK}Active{R} (tracks Polymarket prices for divergence)")
-        print(f"    Order Book Intel: {OK}Active{R} (whale detection + imbalance)")
-        print(f"    Mean Reversion: {OK}Active{R} (replaces Momentum — buys the bounce)")
-        print(f"    Smart Flash: {OK}Active{R} (book filter + volatility gate)")
-        print(f"    Market Loss Limit: {OK}Active{R} (stop after 2 losses per market)")
         print(f"\n  {H1}{'='*55}{R}")
-        print(f"  {'LIVE TRADING v8' if not s.c.dry_run else 'DRY RUN v8'}")
+        print(f"  {'LIVE TRADING v7' if not s.c.dry_run else 'DRY RUN v7'}")
         print(f"  {H1}{'='*55}{R}")
-        time.sleep(3); s._init_history(); s._sync_existing_positions(); s.dash.ev("Bot v8 started"); s._loop()
+        time.sleep(3); s._init_history(); s._sync_existing_positions(); s.dash.ev("Bot v6 started"); s._loop()
 
     def _loop(s):
         ctr = 0; s._orders = []; s._poly_pos = []
@@ -2320,9 +2000,6 @@ class Bot:
                         s.sizer.record(p.strat, p.side, p.pnl > 0, p.pnl, p.entry, hour, s.trend.regime)
                     # v7: Track win streak
                     s.win_streak.record(p.pnl > 0)
-                    # v8: Track per-market losses
-                    if p.pnl <= 0:
-                        s.market_losses.record_loss(p.slug)
                     # v7: Smart redeem — trigger after wins
                     if p.pnl > 0:
                         s._last_win_market = time.time()
@@ -2348,20 +2025,14 @@ class Bot:
                 for p in s.risk.positions:
                     if p.status != "OPEN": s._log_trade(p)
                 if s.mkt:
-                    try:
-                        yp, np_ = s.ex.prices(s.mkt); s.mkt.yes_p, s.mkt.no_p = yp, np_
-                        # v8: Update token price feed
-                        s.token_feed.update(s.mkt.slug, yp, np_)
+                    try: yp, np_ = s.ex.prices(s.mkt); s.mkt.yes_p, s.mkt.no_p = yp, np_
                     except: pass
                 if ctr % 5 == 0:
                     for asset in s.c.assets:
                         m = s.finder.find(asset)
                         if m:
                             s.conn.gamma = "OK"  # Gamma works if we found a market
-                            try:
-                                yp, np_ = s.ex.prices(m); m.yes_p, m.no_p = yp, np_
-                                # v8: Update order book intelligence
-                                s.book_intel.update(s.ex, m)
+                            try: yp, np_ = s.ex.prices(m); m.yes_p, m.no_p = yp, np_
                             except: pass
                             new_market = (s.mkt is None or s.mkt.slug != m.slug)
                             if new_market:
@@ -2517,14 +2188,14 @@ class Bot:
         spread = s.ex.check_spread(m.tok_yes)
         if spread is not None and spread > 0.08:
             s.strats["ARB"] = f"wide spread ${spread:.2f}"
-            s.strats["LATENCY"] = "wide spread"; s.strats["MEANREV"] = "wide spread"
+            s.strats["LATENCY"] = "wide spread"; s.strats["MOMENTUM"] = "wide spread"
             s.strats["FLASH"] = "wide spread"
             return
 
         # ── BAD HOUR (directional only, ARB exempt) ──
         bad_hour = not s.sizer.is_good_hour()
         if bad_hour:
-            s.strats["LATENCY"] = "bad hour"; s.strats["MEANREV"] = "bad hour"; s.strats["FLASH"] = "bad hour"
+            s.strats["LATENCY"] = "bad hour"; s.strats["MOMENTUM"] = "bad hour"; s.strats["FLASH"] = "bad hour"
 
         # v7: Time-of-day sizing multiplier
         hour_str = str(datetime.now(timezone.utc).hour)
@@ -2555,14 +2226,6 @@ class Bot:
         # v7.2: Hard max size cap — no single trade exceeds 10% of balance
         # This catches multiplier stacking (trend * conviction * streak * tod)
         hard_max = s.risk.show_bal * 0.10
-
-        # v8: Per-market loss limit — reduce or block after losses on this market
-        market_penalty = s.market_losses.get_penalty(m.slug)
-        if market_penalty <= 0.0:
-            # 2+ losses on this market — sit it out, wait for next market
-            for strat_key in ["LATENCY", "FLASH", "MEANREV", "SQUEEZE", "ARB"]:
-                s.strats[strat_key] = "market stopped (2L)"
-            return
 
         # ── HELPER: check if a trade is allowed ──
         def allowed(strat, side, price):
@@ -2646,7 +2309,7 @@ class Bot:
                         sz = sz * trend_mult
                         # v7: Apply conviction bonus, win streak, time-of-day
                         conv_bonus = s.conviction.get_bonus(m.slug, sig["dir"])
-                        sz = sz * conv_bonus * streak_mult * tod_mult * market_penalty
+                        sz = sz * conv_bonus * streak_mult * tod_mult
                         sz = min(sz, av, max_market_risk - market_risk, hard_max)
                         if sz >= 1.0 and 0.08 <= p <= 0.45:
                             # No confirmation delay — latency edge IS speed
@@ -2669,46 +2332,46 @@ class Bot:
         elif not bad_hour:
             s.strats["LATENCY"] = f"btc {s.feed.chg(60)*100:+.2f}%"
 
-        # ── S3: MEAN REVERSION (v8: replaces dead Momentum — buys the bounce) ──
-        sig = s.s3.check(m, s.feed, s.trend, s.token_feed, s.book_intel)
-        if sig and mom_ok and time.time() - s.cd.get("mrev", 0) > 20 and not s.sizer.is_paused("MEANREV") and not bad_hour:
-            p = sig["price"]
+        # ── S3: VELOCITY (big fast BTC moves — no confirmation, speed matters) ──
+        sig = s.s3.check(m, s.feed, s.trend)
+        if sig and mom_ok and time.time() - s.cd.get("mom", 0) > 30 and not s.sizer.is_paused("MOMENTUM") and not bad_hour:
+            p = m.yes_p if sig["yes"] else m.no_p
             if s.momentum_guard.should_block(sig["yes"]):
-                s.strats["MEANREV"] = f"momentum guard"
+                s.strats["MOMENTUM"] = f"momentum guard"
             else:
-                ok, reason, same_count = allowed("MEANREV", sig["dir"], p)
+                ok, reason, same_count = allowed("MOMENTUM", sig["dir"], p)
                 if not ok:
-                    s.strats["MEANREV"] = reason
+                    s.strats["MOMENTUM"] = reason
                 else:
-                    should, trend_mult = s.trend.should_trade("MOMENTUM", sig["yes"])  # uses MOMENTUM rules
+                    should, trend_mult = s.trend.should_trade("MOMENTUM", sig["yes"])
                     if should and not s.sizer.is_side_cold(sig["dir"]):
-                        sz = s.sizer.get_size("MEANREV", s.c.get_base_size("MOMENTUM", s.risk.show_bal), s.risk.show_bal, same_strat_count=same_count)
+                        sz = s.sizer.get_size("MOMENTUM", s.c.get_base_size("MOMENTUM", s.risk.show_bal), s.risk.show_bal, same_strat_count=same_count)
                         sz = sz * trend_mult
                         conv_bonus = s.conviction.get_bonus(m.slug, sig["dir"])
-                        sz = sz * conv_bonus * streak_mult * tod_mult * market_penalty
+                        sz = sz * conv_bonus * streak_mult * tod_mult
                         sz = min(sz, av, max_market_risk - market_risk, hard_max)
-                        if sz >= 1.0 and 0.10 <= p <= 0.35:
-                            drop_pct = sig.get("drop", 0) * 100
-                            s.strats["MEANREV"] = f"BOUNCE {sig['dir']} drop:{drop_pct:.0f}% vel:{sig.get('velocity',0):.3f}"
+                        if sz >= 1.0 and 0.08 <= p <= 0.45:
+                            v_info = sig.get("sig", {})
+                            s.strats["MOMENTUM"] = f"SPIKE {sig['dir']} {v_info.get('chg',0)*100:.2f}% in {v_info.get('window',0)}s"
                             sh = max(sz / p, 5.0)
                             if sh * p > av: sh = av / p
-                            s.dash.ev(f"[MREV] {sig['dir']} ${sz:.2f} bounce drop:{drop_pct:.0f}%")
+                            s.dash.ev(f"[VEL] {sig['dir']} ${sz:.2f} {v_info.get('chg',0)*100:.2f}%/{v_info.get('window',0)}s")
                             oid, actual_shares = s.ex.order(m, sig["yes"], p, sh)
                             if oid:
-                                t = Trd(datetime.now(timezone.utc), "MEANREV", m.slug, sig["dir"], p, sz, oid=oid)
-                                s.risk.open(t, market_end=m.end, actual_shares=actual_shares); s.cd["mrev"] = time.time()
+                                t = Trd(datetime.now(timezone.utc), "MOMENTUM", m.slug, sig["dir"], p, sz, oid=oid)
+                                s.risk.open(t, market_end=m.end, actual_shares=actual_shares); s.cd["mom"] = time.time()
                                 if m.cid: s._traded_cids.add(m.cid); s._save_traded_cids()
-                                s.conviction.record_signal(m.slug, "MEANREV", sig["dir"])
+                                s.conviction.record_signal(m.slug, "MOMENTUM", sig["dir"])
                                 s._beep()
-                        else: s.strats["MEANREV"] = f"signal! {sig['dir']} p=${p:.2f}"
+                        else: s.strats["MOMENTUM"] = f"signal! {sig['dir']} p=${p:.2f}"
                     else:
                         reason = "against trend" if not should else "side cold"
-                        s.strats["MEANREV"] = f"blocked ({reason})"
+                        s.strats["MOMENTUM"] = f"blocked ({reason})"
         elif not bad_hour:
-            s.strats["MEANREV"] = f"scanning"
+            s.strats["MOMENTUM"] = f"scanning"
 
-        # ── S4: FLASH (v8: order book aware + volatility gated) ──
-        sig = s.s4.check(m, s.feed, s.trend, s.token_feed, s.book_intel)
+        # ── S4: FLASH (trend-aware, needs 5+ min left) ──
+        sig = s.s4.check(m, s.feed, s.trend)
         if sig and flash_ok and time.time() - s.cd.get("flash", 0) > 60 and not s.sizer.is_paused("FLASH") and not bad_hour:
             p = sig["price"]
             if s.momentum_guard.should_block(sig["yes"]):
@@ -2723,7 +2386,7 @@ class Bot:
                         sz = s.sizer.get_size("FLASH", s.c.get_base_size("FLASH", s.risk.show_bal), s.risk.show_bal, same_strat_count=same_count)
                         sz = sz * trend_mult
                         conv_bonus = s.conviction.get_bonus(m.slug, sig["dir"])
-                        sz = sz * conv_bonus * streak_mult * tod_mult * market_penalty
+                        sz = sz * conv_bonus * streak_mult * tod_mult
                         sz = min(sz, av, max_market_risk - market_risk, hard_max)
                         if sz >= 1.0:
                             bonus_tag = f" CONV:{conv_bonus:.1f}x" if conv_bonus > 1 else ""
@@ -2760,7 +2423,6 @@ class Bot:
                         # Small size: 2-3% of balance for lottery tickets
                         base = min(s.c.get_base_size("SQUEEZE", s.risk.show_bal), s.risk.show_bal * 0.03)
                         sz = s.sizer.get_size("SQUEEZE", base, s.risk.show_bal, same_strat_count=same_count)
-                        sz = sz * market_penalty  # v8: reduce after first loss on this market
                         sz = min(sz, av, max_market_risk - market_risk, hard_max)
                         if sz >= 0.50 and p <= 0.20:
                             tl_left = sig["squeeze_count"]
@@ -2789,7 +2451,7 @@ class Bot:
         os.system("cls" if os.name == "nt" else "clear")
         w, l, wr = s.risk.stats()
         print(f"\n{H1}{'═'*60}")
-        print(f"  {LBL}SESSION SUMMARY — BOT v8{R}")
+        print(f"  {LBL}SESSION SUMMARY — BOT v7{R}")
         print(f"{H1}{'═'*60}{R}")
         print(f"  {LBL}Balance:{R}  {bal_c(s.risk.show_bal)} USDC")
         print(f"  {LBL}Real P&L:{R} {pnl_c2(s.risk.tpnl)}")

@@ -431,9 +431,3 @@
 2026-02-16 15:32:44,389|INFO|Loaded 34 condition IDs for redemption
 2026-02-16 15:32:46,957|INFO|Auth OK type=1 funder=0xF9b8c919b97CbD5eb1d71b23B9915Df711860694
 2026-02-16 15:32:47,123|INFO|Updated STARTING_BALANCE to $1710.02
-2026-02-16 16:02:09,298|INFO|Loaded 32 historical trades for adaptive sizing
-2026-02-16 16:02:09,309|INFO|Loaded 34 condition IDs for redemption
-2026-02-16 16:02:11,908|INFO|Auth OK type=1 funder=0xF9b8c919b97CbD5eb1d71b23B9915Df711860694
-2026-02-16 16:02:12,063|INFO|Updated STARTING_BALANCE to $1710.02
-2026-02-16 16:07:28,123|DEBUG|Redeem check fail: {'code': -32090, 'message': 'Too many requests, reason: call rate limit exhausted, retry in 10s', 'data': {'trace_id': '987839b9d29b395dbd28245a57855b0b'}}
-2026-02-16 16:07:33,605|DEBUG|Redeem check fail: {'code': -32090, 'message': 'Too many requests, reason: call rate limit exhausted, retry in 10s', 'data': {'trace_id': '8d957b5a9374ca97e50719e65f4dd38b'}}
