@@ -1,8 +1,0 @@
-2026-02-14 16:42:43,989|INFO|Auth OK type=1 funder=0xe2446Ade31f46a8B3BA3c92B7ef18c0879Bb9043
-2026-02-14 17:35:41,646|INFO|Auth OK type=1 funder=0xe2446Ade31f46a8B3BA3c92B7ef18c0879Bb9043
-2026-02-14 17:47:44,432|INFO|Auth OK type=1 funder=0xe2446Ade31f46a8B3BA3c92B7ef18c0879Bb9043
-2026-02-14 17:49:58,292|ERROR|Order fail (attempt 1): PolyApiException[status_code=400, error_message={'error': 'invalid signature'}]
-2026-02-14 17:49:59,007|INFO|Re-derived API creds, retrying order...
-2026-02-14 17:49:59,405|ERROR|Order fail (attempt 2): PolyApiException[status_code=400, error_message={'error': 'invalid signature'}]
-2026-02-14 18:26:10,611|INFO|Auth OK type=1 funder=0xF9b8c919b97CbD5eb1d71b23B9915Df711860694
-2026-02-14 18:32:58,095|INFO|MARKET ORDER: $2.00 NO id=0x91ca85067ec2a39ed6a62e52dcaff7c4f0c33807593d0a72935a5b8d2e79c41b st=matched

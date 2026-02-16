@@ -264,3 +264,22 @@
 2026-02-15 18:19:48,411|INFO|LIMIT ORDER: $2.75 NO (5.00sh @ $0.55) id=0x4358219441c88f1cf3ed082a8891ac84cf1647681b5efd0d15d57aee84090412 st=live
 2026-02-15 18:20:51,995|DEBUG|Redeem check fail: ('execution reverted: Too many requests, reason: call rate limit exhausted, retry in 10s', {'trace_id': '2a55bf83afeeae6ba77b6da6b005ba75'})
 2026-02-15 18:21:31,015|DEBUG|Cleanup: removed 3 old positions, 0 stale confirms
+2026-02-16 06:58:38,076|INFO|Loaded 17 historical trades for adaptive sizing
+2026-02-16 06:58:38,086|INFO|Loaded 18 condition IDs for redemption
+2026-02-16 06:58:45,331|INFO|Auth OK type=1 funder=0xF9b8c919b97CbD5eb1d71b23B9915Df711860694
+2026-02-16 06:58:45,487|INFO|Updated STARTING_BALANCE to $151.53
+2026-02-16 07:03:58,298|DEBUG|Redeem check fail: ('execution reverted: Too many requests, reason: call rate limit exhausted, retry in 10s', {'trace_id': '8c56a4d8e4f4bd6c16bb8c5c15d459fe'})
+2026-02-16 07:04:00,756|DEBUG|Redeem check fail: {'code': -32090, 'message': 'Too many requests, reason: call rate limit exhausted, retry in 10s', 'data': {'trace_id': '927f7b243bd199c7488d26650a373535'}}
+2026-02-16 07:04:22,496|INFO|MARKET ORDER: $5.45 NO id=0xe518524bd05970206584e9b82437d341ebc0c9bb7e476714500801ae47ca855f st=matched shares=17.627281
+2026-02-16 07:04:56,165|INFO|MARKET ORDER: $2.18 NO id=0x853f7c7a153bcb2aec28941a4d332c14af013ab8baa76618c99dc18da117ccc5 st=matched shares=8.074073
+2026-02-16 07:07:41,982|ERROR|Market order fail: PolyApiException[status_code=400, error_message={'error': "order couldn't be fully filled. FOK orders are fully filled or killed."}]
+2026-02-16 07:07:42,378|INFO|LIMIT ORDER: $4.90 NO (18.16sh @ $0.27) id=0xb499ce2d4338d67b89d9f99dcc1f239ba7a422dcdc9449975a686ae7888a220f st=live
+2026-02-16 07:09:11,415|DEBUG|Redeem check fail: {'code': -32090, 'message': 'Too many requests, reason: call rate limit exhausted, retry in 10s', 'data': {'trace_id': 'a79bb7a8e63ebba642815dd6afc9370e'}}
+2026-02-16 07:09:17,040|DEBUG|Redeem check fail: {'code': -32090, 'message': 'Too many requests, reason: call rate limit exhausted, retry in 10s', 'data': {'trace_id': '89b4d3d97272395f59d0b152772ef149'}}
+2026-02-16 07:09:19,497|DEBUG|Redeem check fail: ('execution reverted: Too many requests, reason: call rate limit exhausted, retry in 10s', {'trace_id': '231503fbdfcce03d65f2070148cc722b'})
+2026-02-16 07:12:20,816|INFO|Loaded 17 historical trades for adaptive sizing
+2026-02-16 07:12:20,829|INFO|Loaded 19 condition IDs for redemption
+2026-02-16 07:12:23,145|INFO|Auth OK type=1 funder=0xF9b8c919b97CbD5eb1d71b23B9915Df711860694
+2026-02-16 07:12:23,304|INFO|Updated STARTING_BALANCE to $143.90
+2026-02-16 07:17:50,626|DEBUG|Redeem check fail: {'code': -32090, 'message': 'Too many requests, reason: call rate limit exhausted, retry in 10s', 'data': {'trace_id': '28a5633e3f3a2ea25017652d424191af'}}
+2026-02-16 07:17:53,103|DEBUG|Redeem check fail: ('execution reverted: Too many requests, reason: call rate limit exhausted, retry in 10s', {'trace_id': 'd66cef0efce8f5e21d4e50f3dc6588ce'})

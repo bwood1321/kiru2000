@@ -1,5 +1,5 @@
 """
-POLYMARKET BTC 15-MIN BOT v5 — PROXY WALLET + AUTO-REDEEM
+POLYMARKET BTC 15-MIN BOT v5.1 — IMPROVED STRATEGIES + SMART SIZING
 Complete rebuild for email/proxy wallet (signature_type=1).
 
 KEY CHANGES FROM v4:
@@ -39,7 +39,7 @@ def pnl_c2(v):
     if v > 0: return f"{OK}+${v:.2f}{R}"
     if v < 0: return f"{ERR}-${abs(v):.2f}{R}"
     return f"${v:.2f}"
-def bal_c(v): return f"{OK}${v:.6f}{R}"
+def bal_c(v): return f"{OK}${v:.2f}{R}"
 
 @dataclass
 class Config:
@@ -51,11 +51,11 @@ class Config:
     signature_type: int = 1  # v5: proxy wallet
     dry_run: bool = False
     starting_balance: float = 24.0
-    # Trade sizes — conservative for $24
-    arb_size: float = 3.0
-    latency_size: float = 3.0
-    momentum_size: float = 3.0
-    flash_size: float = 2.0
+    # Dynamic sizing — % of balance per trade
+    arb_pct: float = 0.05       # 5% of balance
+    latency_pct: float = 0.06   # 6% of balance
+    momentum_pct: float = 0.05  # 5% of balance
+    flash_pct: float = 0.05     # 5% of balance
     # Strategy config
     arb_enabled: bool = True
     arb_max_pair_cost: float = 0.99   # v5.1: realistic — markets often sum to 0.98-0.99
@@ -65,9 +65,15 @@ class Config:
     momentum_enabled: bool = True
     momentum_conf: float = 0.65       # v5.1: 65% confidence (was 78%)
     flash_enabled: bool = True
-    flash_threshold: float = 0.30     # v5.1: buy when side drops below 30¢ (was 18¢)
+    flash_threshold: float = 0.27     # v5.1: tightened from 30¢ — CSV data shows losses at $0.28-$0.30
     max_daily_loss: float = 10.0
     max_positions: int = 7
+    def get_size(s, strat, balance):
+        """Dynamic sizing: returns dollar amount based on % of current balance"""
+        pcts = {"ARB": s.arb_pct, "LATENCY": s.latency_pct, "MOMENTUM": s.momentum_pct, "FLASH": s.flash_pct}
+        pct = pcts.get(strat, 0.05)
+        sz = round(balance * pct, 2)
+        return max(sz, 1.0)  # minimum $1
     poll_sec: int = 2
     assets: list = field(default_factory=lambda: ["btc"])
 
@@ -81,10 +87,10 @@ class Config:
             signature_type=int(os.getenv("SIGNATURE_TYPE", "1")),
             dry_run=os.getenv("DRY_RUN", "false").lower() == "true",
             starting_balance=float(os.getenv("STARTING_BALANCE", "24.0")),
-            arb_size=float(os.getenv("ARB_SIZE", "3.0")),
-            latency_size=float(os.getenv("LATENCY_SIZE", "3.0")),
-            momentum_size=float(os.getenv("MOMENTUM_SIZE", "3.0")),
-            flash_size=float(os.getenv("FLASH_SIZE", "2.0")),
+            arb_pct=float(os.getenv("ARB_PCT", "0.05")),
+            latency_pct=float(os.getenv("LATENCY_PCT", "0.06")),
+            momentum_pct=float(os.getenv("MOMENTUM_PCT", "0.05")),
+            flash_pct=float(os.getenv("FLASH_PCT", "0.05")),
             max_daily_loss=float(os.getenv("MAX_DAILY_LOSS", "10.0")),
         )
 
@@ -106,6 +112,7 @@ class Pos:
     entry: float; shares: float; cost: float
     pnl: float = 0.0; opened: datetime = None; status: str = "OPEN"
     market_end: datetime = None  # when the 15-min market expires
+    _recorded: bool = False
 
 @dataclass
 class Trd:
@@ -179,10 +186,10 @@ class S_Arb:
         buy_yes = yp < np_
         price = yp if buy_yes else np_
         if price < 0.10 or price > 0.55: return None
-        shares = s.c.arb_size / price
+        shares = 1  # placeholder, will be set dynamically in _trade
         side = "YES" if buy_yes else "NO"
         return {"s": "ARB", "side": side, "yes": buy_yes, "price": price,
-                "pair": pair, "profit": 1.0 - pair, "sz": s.c.arb_size, "shares": shares}
+                "pair": pair, "profit": 1.0 - pair, "sz": 0, "shares": shares}
 
 class S_Latency:
     """Buy when BTC moved on Binance but Polymarket hasn't caught up."""
@@ -208,7 +215,19 @@ class S_Latency:
         other = m.no_p if up else m.yes_p
         if other < 0.20: return None
         return {"s": "LATENCY", "dir": "YES" if up else "NO", "yes": up,
-                "edge": edge, "pred": pred, "p": mp, "chg": chg, "sz": s.c.latency_size}
+                "edge": edge, "pred": pred, "p": mp, "chg": chg, "sz": 0}
+    def check_with_trend(s, m, f, trend):
+        sig = s.check(m, f)
+        if sig and trend:
+            # Boost confidence when trend agrees
+            up = sig["yes"]
+            if (up and trend.trend_dir > 0) or (not up and trend.trend_dir < 0):
+                sig["edge"] = min(0.40, sig["edge"] + 0.03)
+            # Reduce confidence when trend disagrees
+            elif (up and trend.trend_dir < 0) or (not up and trend.trend_dir > 0):
+                sig["edge"] -= 0.03
+                if sig["edge"] < s.c.latency_min_edge: return None
+        return sig
 
 class S_Momentum:
     """5-indicator momentum with VWAP confirmation."""
@@ -244,7 +263,7 @@ class S_Momentum:
         if conf < s.c.momentum_conf or abs(comp) < 0.12: return None  # v5.1: 0.12 (was 0.18)
         up = comp > 0
         return {"s": "MOMENTUM", "dir": "YES" if up else "NO", "yes": up,
-                "conf": conf, "comp": comp, "sig": sig, "rsi": rsi, "sz": s.c.momentum_size}
+                "conf": conf, "comp": comp, "sig": sig, "rsi": rsi, "sz": 0}
     def _ema(s, p, n):
         k = 2 / (n + 1); e = p[0]
         for x in p[1:]: e = x * k + e * (1 - k)
@@ -256,24 +275,131 @@ class S_Momentum:
         return 100 if l == 0 else 100 - 100 / (1 + g / l)
 
 class S_Flash:
-    """Buy extreme dips ONLY when BTC direction agrees (panic oversold)."""
+    """v5.1 IMPROVED: Buy cheap sides with smarter entry timing.
+    CSV data analysis: best wins at $0.10-$0.25, losses at $0.28+.
+    Improvements:
+    - Prefer entries mid-market (5-10 min) where direction is clearer
+    - Stronger momentum confirmation for entries > $0.22
+    - Very cheap entries ($0.05-$0.15) need minimal confirmation
+    - Size boost for very cheap entries (better R:R)"""
     def __init__(s, c): s.c = c
-    def check(s, m, f):
+    def check(s, m, f, trend=None):
         if not s.c.flash_enabled or f.n < 10: return None
-        yes_cheap = m.yes_p <= s.c.flash_threshold
-        no_cheap = m.no_p <= s.c.flash_threshold
+        yes_cheap = 0.05 <= m.yes_p <= s.c.flash_threshold
+        no_cheap = 0.05 <= m.no_p <= s.c.flash_threshold
         if not yes_cheap and not no_cheap: return None
-        btc_chg = f.chg(120)
-        if abs(btc_chg) > 0.015: return None  # v5.1: allow slightly more movement
+        btc_2m = f.chg(120)
+        btc_30s = f.chg(30)
+        btc_10s = f.chg(10)
         tl = (m.end - datetime.now(timezone.utc)).total_seconds()
-        if tl < 180: return None  # v5.1: 3 min minimum (was 4)
-        # Buy cheap YES if BTC isn't tanking
-        if yes_cheap and btc_chg >= -0.005:
-            return {"s": "FLASH", "dir": "YES", "yes": True, "price": m.yes_p, "sz": s.c.flash_size}
-        # Buy cheap NO if BTC isn't mooning
-        if no_cheap and btc_chg <= 0.005:
-            return {"s": "FLASH", "dir": "NO", "yes": False, "price": m.no_p, "sz": s.c.flash_size}
+        if tl < 120: return None  # need 2+ min
+        # Don't trade in extreme moves — market already decided
+        if abs(btc_2m) > 0.012: return None
+        # Determine cheap tier for entry strictness
+        # Tier 1: $0.05-$0.15 (amazing R:R, loose entry)
+        # Tier 2: $0.15-$0.22 (good R:R, normal entry)
+        # Tier 3: $0.22-$0.27 (ok R:R, strict entry)
+        
+        if yes_cheap:
+            price = m.yes_p
+            tier = 1 if price <= 0.15 else (2 if price <= 0.22 else 3)
+            # Tier 1: any sign of life
+            if tier == 1 and (btc_10s > -0.0005 or btc_30s > -0.001):
+                return {"s": "FLASH", "dir": "YES", "yes": True, "price": price, "sz": 0, "tier": tier}
+            # Tier 2: need mild recovery
+            if tier == 2 and (btc_30s > 0 or btc_10s > 0.0001):
+                if trend is None or trend.trend_dir >= 0:
+                    return {"s": "FLASH", "dir": "YES", "yes": True, "price": price, "sz": 0, "tier": tier}
+            # Tier 3: need clear recovery + trend support
+            if tier == 3 and btc_30s > 0.0001 and btc_10s > 0:
+                if trend is not None and trend.trend_dir >= 0:
+                    # Extra: prefer mid-market timing (5-10 min in)
+                    if tl <= 600:  # within first 10 min
+                        return {"s": "FLASH", "dir": "YES", "yes": True, "price": price, "sz": 0, "tier": tier}
+        
+        if no_cheap:
+            price = m.no_p
+            tier = 1 if price <= 0.15 else (2 if price <= 0.22 else 3)
+            if tier == 1 and (btc_10s < 0.0005 or btc_30s < 0.001):
+                return {"s": "FLASH", "dir": "NO", "yes": False, "price": price, "sz": 0, "tier": tier}
+            if tier == 2 and (btc_30s < 0 or btc_10s < -0.0001):
+                if trend is None or trend.trend_dir <= 0:
+                    return {"s": "FLASH", "dir": "NO", "yes": False, "price": price, "sz": 0, "tier": tier}
+            if tier == 3 and btc_30s < -0.0001 and btc_10s < 0:
+                if trend is not None and trend.trend_dir <= 0:
+                    if tl <= 600:
+                        return {"s": "FLASH", "dir": "NO", "yes": False, "price": price, "sz": 0, "tier": tier}
         return None
+
+
+# ─── TREND ENGINE (from v6) ───
+class TrendEngine:
+    """Lightweight trend detection — helps strategies pick the right side."""
+    def __init__(s):
+        s.trend_dir = 0  # -1=down, 0=flat, 1=up
+        s.trend_str = "FLAT"
+        s.btc_changes = deque(maxlen=60)
+        s.market_results = deque(maxlen=20)
+        s.hourly_stats = {}
+        s._last_update = 0
+    def update(s, feed):
+        if time.time() - s._last_update < 5: return
+        s._last_update = time.time()
+        if feed.n < 10: return
+        chg_30 = feed.chg(30)
+        chg_120 = feed.chg(120)
+        s.btc_changes.append(chg_30)
+        # Simple trend: weight recent more
+        if abs(chg_120) < 0.0003:
+            s.trend_dir = 0; s.trend_str = "FLAT"
+        elif chg_120 > 0.0008:
+            s.trend_dir = 1; s.trend_str = "UP"
+        elif chg_120 < -0.0008:
+            s.trend_dir = -1; s.trend_str = "DOWN"
+        elif chg_30 > 0.0003:
+            s.trend_dir = 1; s.trend_str = "DRIFT_UP"
+        elif chg_30 < -0.0003:
+            s.trend_dir = -1; s.trend_str = "DRIFT_DN"
+        else:
+            s.trend_dir = 0; s.trend_str = "FLAT"
+    def record_result(s, won, hour):
+        s.market_results.append(won)
+        h = str(hour)
+        if h not in s.hourly_stats: s.hourly_stats[h] = {"w": 0, "l": 0}
+        if won: s.hourly_stats[h]["w"] += 1
+        else: s.hourly_stats[h]["l"] += 1
+    def is_bad_hour(s):
+        h = str(datetime.now(timezone.utc).hour)
+        st = s.hourly_stats.get(h)
+        if not st: return False
+        total = st["w"] + st["l"]
+        if total < 3: return False
+        wr = st["w"] / total
+        return wr < 0.25  # hour is bad if < 25% win rate with 3+ trades
+    def recent_streak(s):
+        """Returns negative number for losing streak, positive for winning."""
+        if not s.market_results: return 0
+        streak = 0
+        last = list(s.market_results)[-1]
+        for r in reversed(list(s.market_results)):
+            if r == last: streak += 1
+            else: break
+        return streak if last else -streak
+    def should_pause(s):
+        """Pause if 4+ losses in a row."""
+        return s.recent_streak() <= -4
+
+class SideLock:
+    """Prevent conflicting YES/NO positions in the same market."""
+    def __init__(s):
+        s.locked_side = {}  # slug -> "YES" or "NO"
+    def lock(s, slug, side):
+        s.locked_side[slug] = side
+    def is_locked(s, slug, side):
+        if slug not in s.locked_side: return False
+        return s.locked_side[slug] != side  # blocked if trying opposite
+    def reset(s, slug):
+        s.locked_side.pop(slug, None)
 
 # ─── MARKET FINDER ───
 class Finder:
@@ -603,8 +729,12 @@ class Risk:
         s.positions.append(p); s.trades.append(t); s.total_bet += t.size; return p
     def resolve(s, pos, won):
         if won:
-            # Payout = shares × $1.00, minus cost, minus 2% fee
-            pnl = (pos.shares * 1.0 - pos.cost) * 0.98
+            # ACCURATE P&L: payout = shares × $1.00 × 0.98 (2% fee)
+            # profit = payout - cost (what we actually spent)
+            gross_payout = pos.shares * 1.0
+            fee = gross_payout * 0.02
+            net_payout = gross_payout - fee
+            pnl = net_payout - pos.cost  # profit = what we got back - what we spent
         else:
             pnl = -pos.cost
         pos.pnl = round(pnl, 2); pos.status = "WON" if won else "LOST"
@@ -687,7 +817,7 @@ class Risk:
 class Dash:
     def __init__(s): s.evts = deque(maxlen=8)
     def ev(s, e): s.evts.append(f"{datetime.now().strftime('%H:%M:%S')} {e}")
-    def render(s, c, conn, f, risk, mkt, strats, scores, orders, poly_pos, start_time=None, past_trades=None):
+    def render(s, c, conn, f, risk, mkt, strats, scores, orders, poly_pos, start_time=None, past_trades=None, trend=None, sidelock=None):
         os.system("cls" if os.name == "nt" else "clear")
         now = datetime.now().strftime("%H:%M:%S")
         # Runtime display
@@ -699,25 +829,18 @@ class Dash:
             if hrs > 0: rt = f"  {VAL}⏱ {hrs}h{mins:02d}m{R}"
             else: rt = f"  {VAL}⏱ {mins}m{secs:02d}s{R}"
         mode = f"{ERR}LIVE{R}" if not c.dry_run else f"{WARN}DRY RUN{R}"
-        print(f"  {H1}══════════════════════════════════════════════════════════════")
-        print(f"  ║  POLYMARKET BTC BOT v5 PRO   [{mode}]   {now}{rt}")
-        print(f"  ══════════════════════════════════════════════════════════════{R}")
-        g = f"{OK}\u2713{R}"; x = f"{ERR}\u2717{R}"
-        print(f"    {LBL}CONNECTION{R}")
-        print(f"    {g if conn.gamma != 'FAILED' else x} Gamma:  {conn.gamma}")
-        print(f"    {g if conn.clob != 'FAILED' else x} CLOB:   {conn.clob}")
-        print(f"    {g if conn.can_trade else x} Auth:   {conn.auth}")
-        print(f"    {g if conn.binance != 'FAILED' else x} Binance: {conn.binance}")
-        if conn.can_trade and not c.dry_run: print(f"    {OK}>>> LIVE TRADING (proxy wallet) <<<{R}")
-        elif c.dry_run: print(f"    {WARN}\u25cb DRY RUN{R}")
+        print(f"  {H1}╔{'═'*60}╗{R}")
+        print(f"  {H1}║  POLYMARKET BTC BOT v5.1       {DIM}{now}{R}{rt}  {H1}║{R}")
+        print(f"  {H1}╚{'═'*60}╝{R}")
+        gc = lambda ok: f"{OK}●{R}" if ok else f"{ERR}●{R}"
+        connstr = f"Gamma{gc(conn.gamma != 'FAILED')} CLOB{gc(conn.clob != 'FAILED')} Auth{gc(conn.can_trade)} Binance{gc(conn.binance != 'FAILED')}"
+        print(f"  {connstr}    Mode: {mode}")
         print(f"  {H1}\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500{R}")
-        print(f"    {LBL}ACCOUNT{R}")
-        src = "CHAIN" if risk.real_bal is not None else "est"
-        real_pnl = f"  Real P&L: {pnl_c2(risk.tpnl)}" if risk.start_bal else ""
-        print(f"    Balance: {bal_c(risk.show_bal)} USDC ({src}){real_pnl}")
-        print(f"    Available: {bal_c(risk.available)}   At Risk: {VAL}${risk.open_risk:.2f}{R}")
+        print(f"  {H1}┌{'─'*60}┐{R}")
         w, l, wr = risk.stats()
-        print(f"    Trades: {VAL}{len(risk.trades)}{R}  W:{OK}{w}{R} L:{ERR}{l}{R} WR:{VAL}{wr:.0f}%{R}  Loss Limit: {ERR}-${c.max_daily_loss:.0f}{R}")
+        print(f"  {H1}│{R}  Balance  {VAL}${risk.show_bal:.2f}{R}     Available  {VAL}${risk.available:.2f}{R}      P&L  {pnl_c2(risk.tpnl)}  {H1}│{R}")
+        print(f"  {H1}│{R}  Record   {OK}{w}W{R}/{ERR}{l}L{R} ({VAL}{wr:.0f}%{R})    At Risk  {VAL}${risk.open_risk:.2f}{R}                    {H1}│{R}")
+        print(f"  {H1}└{'─'*60}┘{R}")
         if mkt:
             tl = (mkt.end - datetime.now(timezone.utc)).total_seconds()
             print(f"  {H1}\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500{R}")
@@ -727,13 +850,27 @@ class Dash:
             sm = mkt.yes_p + mkt.no_p; sm_c = OK if sm < 0.99 else VAL
             tl_c = ERR if tl < 120 else WARN if tl < 300 else VAL
             print(f"    YES:{OK}${mkt.yes_p:.4f}{R}  NO:{ERR}${mkt.no_p:.4f}{R}  SUM:{sm_c}${sm:.4f}{R}  Exp:{tl_c}{int(tl//60)}:{int(tl%60):02d}{R}")
+            # Show trend + side lock
+            if trend:
+                td = trend
+                tc = OK if td.trend_dir > 0 else ERR if td.trend_dir < 0 else DIM
+                streak = td.recent_streak()
+                streak_str = f"{OK}+{streak}{R}" if streak > 0 else f"{ERR}{streak}{R}" if streak < 0 else "0"
+                bad = f"  {ERR}⚠BAD HOUR{R}" if td.is_bad_hour() else ""
+                pause = f"  {ERR}⏸PAUSED{R}" if td.should_pause() else ""
+                lock = ""
+                if sidelock and mkt and mkt.slug in sidelock.locked_side:
+                    lock = f"  {WARN}🔒{sidelock.locked_side[mkt.slug]}{R}"
+                print(f"    AI  {tc}▸ {td.trend_str}{R}  Streak:{streak_str}{bad}{pause}{lock}")
         print(f"  {H1}\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500{R}")
         print(f"    {LBL}STRATEGIES{R}")
-        icons = {"ARB": "\u2666", "LATENCY": "\u26a1", "MOMENTUM": "\u2191", "FLASH": "\u26a0"}
+        icons = {"ARB": "\u25c6", "LATENCY": "\u26a1", "MOMENTUM": "\u2197", "FLASH": "\u26a1"}
         for k, v in strats.items():
             ic = icons.get(k, "\u25cb")
-            if "ACTIVE" in str(v): print(f"    {OK}\u25cf {ic} {k:12}{R} {OK}{v}{R}")
-            else: print(f"    {DIM}\u25cb {ic} {k:12}{R} {v}")
+            sz = c.get_size(k, risk.show_bal)
+            if "ACTIVE" in str(v): print(f"    {OK}\u25cf {ic} {k:12}{R} {OK}{v}{R}  {DIM}${sz:.2f}{R}")
+            elif "PAUSED" in str(v) or "bad" in str(v): print(f"    {ERR}\u25cb {ic} {k:12}{R} {ERR}{v}{R}  {DIM}${sz:.2f}{R}")
+            else: print(f"    {DIM}\u25cb {ic} {k:12}{R} {v}  {DIM}${sz:.2f}{R}")
         if scores:
             parts = []
             for k, v in scores.items():
@@ -777,7 +914,7 @@ class Dash:
                 all_ended.append(t)
         for p in closed:
             all_ended.append({
-                "ts": p.opened.strftime('%Y-%m-%d %H:%M:%S') if p.opened else "?",
+                "ts": p.opened.strftime('%H:%M %m/%d') if p.opened else "?",
                 "status": "WIN" if p.pnl > 0 else "LOSS",
                 "strat": p.strat,
                 "side": p.side,
@@ -787,17 +924,25 @@ class Dash:
                 "slug": p.slug,
             })
         if all_ended:
-            print(f"  {H1}\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500{R}")
+            recent = all_ended[-10:]
+            recent.reverse()  # newest on top
             w_count = sum(1 for t in all_ended if t["pnl"] > 0)
             l_count = sum(1 for t in all_ended if t["pnl"] <= 0)
             total_pnl = sum(t["pnl"] for t in all_ended)
-            print(f"    {LBL}ENDED TRADES ({len(all_ended)})  W:{OK}{w_count}{R} L:{ERR}{l_count}{R}  Total:{pnl_c2(total_pnl)}{R}")
-            # Show last 8 trades
-            for t in all_ended[-8:]:
+            print(f"  {H1}\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500{R}")
+            print(f"    {LBL}TRADE HISTORY  {OK}{w_count}W{R} {ERR}{l_count}L{R}  Total:{pnl_c2(total_pnl)}{R}")
+            for t in recent:
                 icon = f"{OK}\u2713{R}" if t["pnl"] > 0 else f"{ERR}\u2717{R}"
-                st = "WON" if t["pnl"] > 0 else "LOST"
                 col = OK if t["pnl"] > 0 else ERR
-                print(f"    {icon} {col}{st:5}{R} [{t['strat'][:5]:5}] {t['side']:6}  ${t['cost']:.2f} @ ${t['entry']:.4f}  P&L:{pnl_c2(t['pnl'])}")
+                ts = t.get("ts", "?")
+                try:
+                    if len(str(ts)) >= 16:
+                        parts = str(ts).split(" ")
+                        date_p = parts[0].split("-")
+                        time_p = parts[1][:5]
+                        ts = f"{time_p} {date_p[1]}/{date_p[2]}"
+                except: pass
+                print(f"    {icon} {DIM}{ts:11}{R} {col}{t['side']:3}{R} [{t['strat'][:5]:5}] ${t['cost']:.2f}@${t['entry']:.2f} {pnl_c2(t['pnl'])}")
         print(f"  {H1}\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550{R}")
         print(f"  {DIM}Ctrl+C to stop{R}")
     def _is_recent(s, p):
@@ -821,6 +966,8 @@ class Bot:
         s.finder = Finder(s.c); s.ex = Executor(s.c); s.risk = Risk(s.c)
         s.dash = Dash()
         s.s1 = S_Arb(s.c); s.s2 = S_Latency(s.c); s.s3 = S_Momentum(s.c); s.s4 = S_Flash(s.c)
+        s.trend = TrendEngine(); s.sidelock = SideLock()
+        s.dash._trend = s.trend  # give dashboard access
         s.mkt = None; s.strats = {"ARB": "...", "LATENCY": "...", "MOMENTUM": "...", "FLASH": "..."}
         s.cd = {}; s._traded_cids = set()
         s.start_time = time.time()
@@ -957,7 +1104,10 @@ class Bot:
             if s.ex.connect(s.conn):
                 print(f"        {OK}Authenticated!{R}")
                 rb = s.ex.get_balance()
-                if rb: s.risk.set_real(rb); print(f"        Balance: ${rb:.6f}")
+                if rb:
+                    s.risk.set_real(rb)
+                    s.c.starting_balance = rb  # auto-set starting balance
+                    print(f"        Balance: ${rb:.2f} (auto-detected)")
                 else: print(f"        {WARN}Balance check failed — using estimate{R}")
             else:
                 print(f"        {ERR}Auth failed{R}")
@@ -1058,6 +1208,8 @@ class Bot:
                 resolved = s.risk.check_exp(s.feed); s._cancel_exp()
                 for p in resolved:
                     s.dash.ev(f"[{p.strat[:3]}] {p.status} P&L:{p.pnl:+.2f}")
+                    # Record result to trend engine
+                    s.trend.record_result(p.status == "WON", datetime.now(timezone.utc).hour)
                 # Log any newly ended positions to trade_history.txt
                 for p in s.risk.positions:
                     if p.status != "OPEN": s._log_trade(p)
@@ -1076,6 +1228,13 @@ class Bot:
                                 m.open_btc = s.feed.price if s.feed.price else 0
                                 s.dash.ev(f"New market: {m.slug[-20:]}")
                                 s.s1.reset(m.slug)
+                                # v5.1: Reset side lock for new market
+                                if s.mkt: s.sidelock.reset(m.slug)
+                                # v5.1: Record results from resolved positions
+                                for p in s.risk.positions:
+                                    if p.status in ("WON", "LOST") and hasattr(p, '_recorded') and not p._recorded:
+                                        s.trend.record_result(p.status == "WON", datetime.now(timezone.utc).hour)
+                                        p._recorded = True
                             if s.conn.can_trade or s.c.dry_run: s._trade(m)
                 if ctr % 30 == 0 and s.ex.authed:
                     rb = s.ex.get_balance()
@@ -1085,7 +1244,7 @@ class Bot:
                 # v5: Auto-redeem every 5 minutes
                 if ctr % 150 == 0 and not s.c.dry_run and s._traded_cids:
                     s._auto_redeem()
-                s.dash.render(s.c, s.conn, s.feed, s.risk, s.mkt, s.strats, s.s3.scores, s._orders, s._poly_pos, s.start_time, s._past_trades)
+                s.dash.render(s.c, s.conn, s.feed, s.risk, s.mkt, s.strats, s.s3.scores, s._orders, s._poly_pos, s.start_time, s._past_trades, s.trend, s.sidelock)
                 time.sleep(s.c.poll_sec)
             except KeyboardInterrupt:
                 s.ex.cancel_all(); s._auto_redeem(); s._close_history(); s._summary(); break
@@ -1121,29 +1280,46 @@ class Bot:
         tl = (m.end - datetime.now(timezone.utc)).total_seconds()
         if tl < 90: return
         av = s.risk.available
+        bal = s.risk.show_bal
         if av < 1.0: return
         open_in_market = sum(1 for p in s.risk.positions if p.status == "OPEN" and p.slug == m.slug)
         if open_in_market >= 2: return
+        # v5.1: Min volatility check — don't trade when BTC is dead flat
+        btc_vol = abs(s.feed.chg(120))
+        if btc_vol < 0.0003 and not sig:  # 0.03% in 2 min = too flat
+            pass  # allow ARB (it doesn't need direction) but others need vol
+        # v5.1: Update trend
+        s.trend.update(s.feed)
+        # v5.1: Check for bad conditions
+        if s.trend.should_pause():
+            for k in s.strats: s.strats[k] = "PAUSED (streak)"
+            return
+        bad_hour = s.trend.is_bad_hour()
 
         # S1: Arb
         sig = s.s1.check(m)
-        if sig and av >= sig["sz"]:
-            s.strats["ARB"] = f"ACTIVE {sig['side']} pair=${sig['pair']:.4f}"
-            s.dash.ev(f"[ARB] {sig['side']} ${sig['sz']:.2f} pair=${sig['pair']:.3f}")
+        if sig and not bad_hour:
+            sz = min(s.c.get_size("ARB", bal), av)
+            if sz >= 1.0 and av >= sz and not s.sidelock.is_locked(m.slug, sig["side"]):
+                sig["sz"] = sz
+                sig["shares"] = sz / sig["price"]
+                s.strats["ARB"] = f"ACTIVE {sig['side']} pair=${sig['pair']:.4f}"
+                s.dash.ev(f"[ARB] {sig['side']} ${sz:.2f} pair=${sig['pair']:.3f}")
             oid, shares = s.ex.order(m, sig["yes"], sig["price"], sig["shares"])
             if oid:
                 t = Trd(datetime.now(timezone.utc), "ARB", m.slug, sig["side"], sig["price"], sig["sz"], oid=oid)
                 s.risk.open(t, market_end=m.end, actual_shares=shares)
+                s.sidelock.lock(m.slug, sig["side"])
                 if m.cid: s._traded_cids.add(m.cid)
                 s._beep()
             return
         s.strats["ARB"] = f"sum=${m.yes_p + m.no_p:.4f}"
 
-        # S2: Latency
-        sig = s.s2.check(m, s.feed)
-        if sig and time.time() - s.cd.get("lat", 0) > 30:
-            p = sig["p"]; sz = min(sig["sz"], av)
-            if sz >= 1.0 and 0.12 <= p <= 0.70:
+        # S2: Latency (with trend)
+        sig = s.s2.check_with_trend(m, s.feed, s.trend)
+        if sig and time.time() - s.cd.get("lat", 0) > 30 and not bad_hour:
+            p = sig["p"]; sz = min(s.c.get_size("LATENCY", bal), av)
+            if sz >= 1.0 and 0.12 <= p <= 0.70 and not s.sidelock.is_locked(m.slug, sig["dir"]):
                 s.strats["LATENCY"] = f"ACTIVE {sig['dir']} edge={sig['edge']*100:.1f}%"
                 sh = max(sz / p, 5.0)
                 if sh * p > av: sh = av / p
@@ -1152,6 +1328,7 @@ class Bot:
                 if oid:
                     t = Trd(datetime.now(timezone.utc), "LATENCY", m.slug, sig["dir"], p, sz, oid=oid)
                     s.risk.open(t, market_end=m.end, actual_shares=shares); s.cd["lat"] = time.time()
+                    s.sidelock.lock(m.slug, sig["dir"])
                     if m.cid: s._traded_cids.add(m.cid)
                     s._beep()
                 return
@@ -1160,10 +1337,11 @@ class Bot:
 
         # S3: Momentum
         sig = s.s3.check(m, s.feed)
-        if sig and time.time() - s.cd.get("mom", 0) > 60:
+        if sig and time.time() - s.cd.get("mom", 0) > 60 and not bad_hour:
             p = m.yes_p if sig["yes"] else m.no_p
-            sz = min(sig["sz"], av)
-            if sz >= 1.0 and 0.15 <= p <= 0.75:
+            sz = min(s.c.get_size("MOMENTUM", bal), av)
+            side = "YES" if sig["yes"] else "NO"
+            if sz >= 1.0 and 0.15 <= p <= 0.75 and not s.sidelock.is_locked(m.slug, side):
                 s.strats["MOMENTUM"] = f"ACTIVE {sig['dir']} {sig['conf']:.0%}"
                 sh = max(sz / p, 5.0)
                 if sh * p > av: sh = av / p
@@ -1172,18 +1350,23 @@ class Bot:
                 if oid:
                     t = Trd(datetime.now(timezone.utc), "MOMENTUM", m.slug, sig["dir"], p, sz, oid=oid)
                     s.risk.open(t, market_end=m.end, actual_shares=shares); s.cd["mom"] = time.time()
+                    s.sidelock.lock(m.slug, sig["dir"])
                     if m.cid: s._traded_cids.add(m.cid)
                     s._beep()
                 return
             else: s.strats["MOMENTUM"] = f"signal! {sig['dir']} {sig['conf']:.0%} p=${p:.2f}"
         else: s.strats["MOMENTUM"] = f"samples:{s.feed.n}"
 
-        # S4: Flash
-        sig = s.s4.check(m, s.feed)
-        if sig and time.time() - s.cd.get("flash", 0) > 120:
-            p = sig["price"]; sz = min(sig["sz"], av)
-            if sz >= 1.0:
-                s.strats["FLASH"] = f"ACTIVE {sig['dir']} @ ${p:.4f}"
+        # S4: Flash (with trend + tier sizing)
+        sig = s.s4.check(m, s.feed, s.trend)
+        if sig and time.time() - s.cd.get("flash", 0) > 90:  # 90s cooldown (was 120)
+            p = sig["price"]
+            tier = sig.get("tier", 2)
+            # Tier-based sizing: cheaper = more confident = bigger bet
+            tier_mult = {1: 1.3, 2: 1.0, 3: 0.8}
+            sz = min(s.c.get_size("FLASH", bal) * tier_mult.get(tier, 1.0), av)
+            if sz >= 1.0 and not s.sidelock.is_locked(m.slug, sig["dir"]):
+                s.strats["FLASH"] = f"ACTIVE {sig['dir']} @ ${p:.4f} T{tier}"
                 sh = max(sz / p, 5.0)
                 if sh * p > av: sh = av / p
                 s.dash.ev(f"[FLASH] {sig['dir']} ${sz:.2f} @ ${p:.4f}")
@@ -1191,6 +1374,7 @@ class Bot:
                 if oid:
                     t = Trd(datetime.now(timezone.utc), "FLASH", m.slug, sig["dir"], p, sz, oid=oid)
                     s.risk.open(t, market_end=m.end, actual_shares=shares); s.cd["flash"] = time.time()
+                    s.sidelock.lock(m.slug, sig["dir"])
                     if m.cid: s._traded_cids.add(m.cid)
                     s._beep()
                 return
