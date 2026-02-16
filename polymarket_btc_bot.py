@@ -85,7 +85,7 @@ class Config:
     min_trades_to_adapt: int = 15
     max_size_multiplier: float = 2.5
     min_size_multiplier: float = 0.3
-    streak_pause_count: int = 3
+    streak_pause_count: int = 5     # v7.1: was 3, raised to 5 — data showed wins after 2-3 loss streaks
     streak_pause_sec: int = 1800
 
     def get_base_size(s, strat, balance):
@@ -1685,8 +1685,13 @@ class Dash:
             for t in past_trades: all_ended.append(t)
         closed = [p for p in risk.positions if p.status != "OPEN"]
         for p in closed:
+            # Convert UTC opened time to local time for display
+            local_ts = "?"
+            if p.opened:
+                local_time = p.opened.astimezone() if p.opened.tzinfo else p.opened
+                local_ts = local_time.strftime('%H:%M %m/%d')
             all_ended.append({
-                "ts": p.opened.strftime('%H:%M %m/%d') if p.opened else "?",
+                "ts": local_ts,
                 "status": "WIN" if p.pnl > 0 else "LOSS",
                 "strat": p.strat, "side": p.side, "cost": p.cost,
                 "entry": p.entry, "pnl": p.pnl, "slug": p.slug,
@@ -1853,7 +1858,12 @@ class Bot:
         s._logged_positions.add(pos.id)
         try:
             with open(s.HISTORY_FILE, "a") as f:
-                ts = pos.opened.strftime('%Y-%m-%d %H:%M:%S') if pos.opened else "?"
+                # Convert UTC to local time for display
+                if pos.opened:
+                    local_time = pos.opened.astimezone() if pos.opened.tzinfo else pos.opened
+                    ts = local_time.strftime('%Y-%m-%d %H:%M:%S')
+                else:
+                    ts = "?"
                 icon = "WIN " if pos.pnl > 0 else "LOSS"
                 pnl = f"+${pos.pnl:.2f}" if pos.pnl > 0 else f"-${abs(pos.pnl):.2f}"
                 regime = s.trend.regime if s.trend else "?"
@@ -2138,7 +2148,14 @@ class Bot:
         # ── POSITION AWARENESS ──
         open_here = [p for p in s.risk.positions if p.status == "OPEN" and p.slug == m.slug]
         open_count = len(open_here)
-        if open_count >= 7: return  # max 7 positions per market
+        if open_count >= 5: return  # v7.1: max 5 positions per market
+
+        # v7.1: 30-second minimum gap between entries on same market
+        # Prevents pile-in: data showed 4 trades firing at 0-second gaps, all losing together
+        if open_here:
+            newest_open = max(p.opened.timestamp() for p in open_here if p.opened)
+            if time.time() - newest_open < 30:
+                return  # wait for previous trade to prove itself
 
         # Side lock: first trade sets direction, all others must match
         locked_side = None
@@ -2201,28 +2218,18 @@ class Bot:
             """Returns (ok, reason, same_strat_count).
             Different strategy joining = always allowed at full size (same_strat_count=0).
             Same strategy stacking = diminishing size, needs cheaper price + trend."""
-            # Smart side lock: normally must match existing direction,
-            # BUT release if trend has clearly reversed and risk is manageable
-            if locked_side and side != locked_side:
-                # Check if we should release the lock:
-                # 1. Trend must clearly support the new direction
-                trend_supports_new = (
-                    (side == "YES" and s.trend.trend_dir > 0 and s.trend.regime in ("TRENDING_UP", "BREAKOUT")) or
-                    (side == "NO" and s.trend.trend_dir < 0 and s.trend.regime in ("TRENDING_DOWN", "BREAKOUT"))
-                )
-                # 2. Existing risk must be small (< 8% of balance)
-                small_risk = market_risk < s.risk.show_bal * 0.08
-                # 3. Must be early enough to recover (7+ min left)
-                early_enough = tl >= 420
-                # 4. Only for directional strategies (not ARB)
-                directional = strat in ("LATENCY", "MOMENTUM", "SQUEEZE")
 
-                if trend_supports_new and small_risk and early_enough and directional:
-                    # Release the lock — trend reversed, old position is small
-                    log.info(f"Side lock released: {locked_side}→{side} (trend={s.trend.regime}, risk=${market_risk:.2f})")
-                    pass  # fall through to allow the trade
-                else:
-                    return False, f"side lock ({locked_side})", 0
+            # v7.1: HARD counter-trend block — data shows 0% win rate on these combos
+            # TRENDING_UP + NO = 0W/5L. TRENDING_DOWN + YES = 0W/1L. No exceptions.
+            if strat != "ARB":  # ARB is direction-agnostic
+                if s.trend.regime == "TRENDING_UP" and side == "NO":
+                    return False, "hard block: NO in TRENDING_UP", 0
+                if s.trend.regime == "TRENDING_DOWN" and side == "YES":
+                    return False, "hard block: YES in TRENDING_DOWN", 0
+
+            # Side lock: must match existing direction
+            if locked_side and side != locked_side:
+                return False, f"side lock ({locked_side})", 0
             # Market risk cap
             remaining_risk = max_market_risk - market_risk
             if remaining_risk < 1.0 and open_count > 0:
@@ -2351,7 +2358,7 @@ class Bot:
 
         # ── S4: FLASH (trend-aware) ──
         sig = s.s4.check(m, s.feed, s.trend)
-        if sig and time.time() - s.cd.get("flash", 0) > 120 and not s.sizer.is_paused("FLASH") and not bad_hour:
+        if sig and time.time() - s.cd.get("flash", 0) > 60 and not s.sizer.is_paused("FLASH") and not bad_hour:
             p = sig["price"]
             if s.momentum_guard.should_block(sig["yes"]):
                 s.strats["FLASH"] = f"momentum guard"

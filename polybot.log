@@ -388,3 +388,35 @@
 2026-02-16 10:48:28,290|DEBUG|Redeem check fail: {'code': -32090, 'message': 'Too many requests, reason: call rate limit exhausted, retry in 10s', 'data': {'trace_id': '18f4259b0088bd5d1d303c5d2f4ab8f0'}}
 2026-02-16 10:48:33,753|DEBUG|Redeem check fail: ('execution reverted: Too many requests, reason: call rate limit exhausted, retry in 10s', {'trace_id': 'b1e68eb1f69a0356dd663b47abe347d8'})
 2026-02-16 11:05:14,604|DEBUG|Redeem check fail: {'code': -32090, 'message': 'Too many requests, reason: call rate limit exhausted, retry in 10s', 'data': {'trace_id': 'a16bcd13a80d4fbff98c57b7f4b228a7'}}
+2026-02-16 11:06:34,965|INFO|Loaded 23 historical trades for adaptive sizing
+2026-02-16 11:06:34,973|INFO|Loaded 29 condition IDs for redemption
+2026-02-16 11:06:37,287|INFO|Auth OK type=1 funder=0xF9b8c919b97CbD5eb1d71b23B9915Df711860694
+2026-02-16 11:06:37,453|INFO|Updated STARTING_BALANCE to $2344.66
+2026-02-16 11:13:02,959|ERROR|Market order fail: PolyApiException[status_code=400, error_message={'error': "order couldn't be fully filled. FOK orders are fully filled or killed."}]
+2026-02-16 11:13:03,141|INFO|LIMIT ORDER: $67.53 YES (1688.18sh @ $0.04) id=0x6e608f8d5bcce0868b746038d93f8fd3668eea58005e50c35e4a5305e9eddd97 st=live
+2026-02-16 11:39:01,407|DEBUG|Redeem check fail: {'code': -32090, 'message': 'Too many requests, reason: call rate limit exhausted, retry in 10s', 'data': {'trace_id': '9afba48cbe32fb69016ced1c1fb5e70d'}}
+2026-02-16 11:40:40,816|INFO|MARKET ORDER: $112.07 NO id=0xf914461cd8b678ce7773f40e9cc4dc6dd719acc4f5f08d4ddc55f0a852ec2426 st=matched shares=821.214284
+2026-02-16 11:40:42,334|INFO|MARKET ORDER: $84.05 NO id=0x864e7c671b7706969c0432fd74287d1bed8fe45be4257b8a35d1ee6a9298d99c st=matched shares=582.822
+2026-02-16 11:44:12,633|DEBUG|Redeem check fail: ('execution reverted: Too many requests, reason: call rate limit exhausted, retry in 10s', {'trace_id': '1688b1386e5043efcfe50d481cc173bc'})
+2026-02-16 11:55:58,423|DEBUG|Redeem check fail: {'code': -32090, 'message': 'Too many requests, reason: call rate limit exhausted, retry in 10s', 'data': {'trace_id': '6b6ebecc8ad8b334688ff8ef52731525'}}
+2026-02-16 11:56:03,948|DEBUG|Redeem check fail: {'code': -32090, 'message': 'Too many requests, reason: call rate limit exhausted, retry in 10s', 'data': {'trace_id': 'f7beb059b7e37a148b26482448161228'}}
+2026-02-16 12:01:18,261|DEBUG|Redeem check fail: ('execution reverted: Too many requests, reason: call rate limit exhausted, retry in 10s', {'trace_id': 'bda20ed98069bfe04f3d6ef2b5d1470b'})
+2026-02-16 12:07:05,633|DEBUG|Cleanup: removed 1 old positions, 0 stale confirms
+2026-02-16 12:13:29,791|INFO|Loaded 26 historical trades for adaptive sizing
+2026-02-16 12:13:29,800|INFO|Loaded 31 condition IDs for redemption
+2026-02-16 12:13:32,473|INFO|Auth OK type=1 funder=0xF9b8c919b97CbD5eb1d71b23B9915Df711860694
+2026-02-16 12:13:32,641|INFO|Updated STARTING_BALANCE to $2138.67
+2026-02-16 12:20:53,073|INFO|Loaded 26 historical trades for adaptive sizing
+2026-02-16 12:20:53,081|INFO|Loaded 31 condition IDs for redemption
+2026-02-16 12:20:55,391|INFO|Auth OK type=1 funder=0xF9b8c919b97CbD5eb1d71b23B9915Df711860694
+2026-02-16 12:20:55,545|INFO|Updated STARTING_BALANCE to $2138.67
+2026-02-16 12:21:29,374|INFO|MARKET ORDER: $35.93 NO id=0x826cf02ddd9ac9a710888c430bb51d4ff191f1300da6e42796c408403350a136 st=matched shares=156.104082
+2026-02-16 12:27:19,056|INFO|MARKET ORDER: $37.85 NO id=0x248b953052e7532de8b0948944c1cc2570daa5fc70f1889e25099880c055f32e st=matched shares=283.75
+2026-02-16 12:52:39,483|DEBUG|Cleanup: removed 1 old positions, 0 stale confirms
+2026-02-16 13:22:01,826|DEBUG|Cleanup: removed 1 old positions, 0 stale confirms
+2026-02-16 13:50:33,800|INFO|Loaded 28 historical trades for adaptive sizing
+2026-02-16 13:50:33,810|INFO|Loaded 32 condition IDs for redemption
+2026-02-16 13:50:39,458|INFO|Auth OK type=1 funder=0xF9b8c919b97CbD5eb1d71b23B9915Df711860694
+2026-02-16 13:50:39,623|INFO|Updated STARTING_BALANCE to $2064.89
+2026-02-16 13:51:14,542|INFO|MARKET ORDER: $69.38 YES id=0x5cc15928f533f924c269e168b885711ee5c8c93e6bfba9be710cf8a818532fd7 st=matched shares=497.966427
+2026-02-16 14:01:21,187|DEBUG|Redeem check fail: {'code': -32090, 'message': 'Too many requests, reason: call rate limit exhausted, retry in 10s', 'data': {'trace_id': '83d75102fe4306306e3b77058ec79baf'}}
