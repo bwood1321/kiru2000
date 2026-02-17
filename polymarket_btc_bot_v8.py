@@ -2619,7 +2619,7 @@ class Bot:
         # ── POSITION AWARENESS ──
         open_here = [p for p in s.risk.positions if p.status == "OPEN" and p.slug == m.slug]
         open_count = len(open_here)
-        if open_count >= 2: return  # v8.1: max 2 positions per market (was 5)
+        if open_count >= 3: return  # v8.1: max 3 positions per market
 
         # v7.1: 30-second minimum gap between entries on same market
         # Checks ALL trades (not just same strategy) to prevent pile-in
@@ -2707,11 +2707,9 @@ class Bot:
 
         # v8: Per-market loss limit — reduce or block after losses on this market
         market_penalty = s.market_losses.get_penalty(m.slug)
-        # Also count open positions as potential losses — don't pile on
+        # If already have positions open + a previous resolved loss, tighten up
         if open_count >= 2 and market_penalty < 1.0:
-            market_penalty = 0.0  # already have 2 open + a previous loss = stop
-        if open_count >= 3:
-            market_penalty = 0.0  # 3 open positions on one market = enough
+            market_penalty = 0.0  # 2 open + a resolved loss = stop adding
         if market_penalty <= 0.0:
             # 2+ losses on this market — sit it out, wait for next market
             for strat_key in ["LATENCY", "FLASH", "MEANREV", "SQUEEZE", "ARB"]:
