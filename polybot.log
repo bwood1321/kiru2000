@@ -437,3 +437,15 @@
 2026-02-16 16:02:12,063|INFO|Updated STARTING_BALANCE to $1710.02
 2026-02-16 16:07:28,123|DEBUG|Redeem check fail: {'code': -32090, 'message': 'Too many requests, reason: call rate limit exhausted, retry in 10s', 'data': {'trace_id': '987839b9d29b395dbd28245a57855b0b'}}
 2026-02-16 16:07:33,605|DEBUG|Redeem check fail: {'code': -32090, 'message': 'Too many requests, reason: call rate limit exhausted, retry in 10s', 'data': {'trace_id': '8d957b5a9374ca97e50719e65f4dd38b'}}
+2026-02-16 16:08:00,490|INFO|Loaded 32 historical trades for adaptive sizing
+2026-02-16 16:08:00,514|INFO|Loaded 34 condition IDs for redemption
+2026-02-16 16:08:02,826|INFO|Auth OK type=1 funder=0xF9b8c919b97CbD5eb1d71b23B9915Df711860694
+2026-02-16 16:08:02,993|INFO|Updated STARTING_BALANCE to $1710.02
+2026-02-16 16:08:37,751|ERROR|Market order fail: PolyApiException[status_code=400, error_message={'error': "order couldn't be fully filled. FOK orders are fully filled or killed."}]
+2026-02-16 16:08:37,920|INFO|LIMIT ORDER: $21.62 YES (154.45sh @ $0.14) id=0x046fa6d025256d23e80a2da0ed6d45ae7bd4a771a8e4093191f1eb0de988a310 st=live
+2026-02-16 16:10:20,222|ERROR|Market order fail: PolyApiException[status_code=400, error_message={'error': "order couldn't be fully filled. FOK orders are fully filled or killed."}]
+2026-02-16 16:10:20,399|INFO|LIMIT ORDER: $158.91 YES (662.12sh @ $0.24) id=0x05fc91c5aeccc8cebb32149d9c4503b6bce2a998cce30ba6609b196f297e498b st=live
+2026-02-16 17:51:10,693|INFO|Loaded 32 historical trades for adaptive sizing
+2026-02-16 17:51:10,707|INFO|Loaded 35 condition IDs for redemption
+2026-02-16 17:51:13,235|INFO|Auth OK type=1 funder=0xF9b8c919b97CbD5eb1d71b23B9915Df711860694
+2026-02-16 17:51:13,386|INFO|Updated STARTING_BALANCE to $1470.38
