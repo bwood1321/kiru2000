@@ -2619,6 +2619,25 @@ class Dash:
             
             print(f"  {H2}│{R}  {LBL}Zone{R}   {dz}       {LBL}Session{R} {sm_str}                            {H2}│{R}")
             
+            # v9.1: Side bias
+            y_m, n_m = cortex._side_mult["YES"], cortex._side_mult["NO"]
+            side_parts = []
+            if y_m < 1.0: side_parts.append(f"{ERR}YES↓{y_m:.1f}x{R}")
+            if n_m < 1.0: side_parts.append(f"{ERR}NO↓{n_m:.1f}x{R}")
+            if side_parts:
+                side_str = " ".join(side_parts)
+                print(f"  {H2}│{R}  {LBL}Side{R}   {side_str}                                          {H2}│{R}")
+
+            # v9.1: Lifecycle model
+            lc_n = len(cortex._lifecycle_data)
+            lc_b = len(cortex._lifecycle_probs)
+            if lc_n > 0:
+                print(f"  {H2}│{R}  {LBL}Lifecycle{R} {OK}{lc_n}{R} mkts  {DIM}{lc_b} buckets{R}                            {H2}│{R}")
+
+            # v9.1: Recovery indicator
+            if sm < 1.0 and cortex._consec_wins >= 2:
+                print(f"  {H2}│{R}  {OK}↑ RECOVERING{R} ({cortex._consec_wins}W streak)                              {H2}│{R}")
+
             # Pattern discoveries
             if cortex._patterns:
                 pats = ", ".join(cortex._patterns.keys())[:40]
