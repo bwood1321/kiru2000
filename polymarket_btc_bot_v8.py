@@ -923,21 +923,28 @@ class StrategyManager:
             with open("trade_data.json", "r") as f:
                 import json
                 data = json.load(f)
-            history = data.get("trades", [])
+            history = data.get("history", [])
             for t in history[-50:]:  # last 50 trades
-                strat = t.get("strategy", "")
+                strat = t.get("strat", "")  # field name is "strat" not "strategy"
                 pnl = t.get("pnl", 0)
-                size = t.get("size", 0)
+                price = t.get("price", 0)
+                won = t.get("won", False)
+                # Estimate size from pnl: if won, cost ≈ payout - pnl. If lost, cost = abs(pnl)
+                if not won:
+                    size = abs(pnl)
+                else:
+                    size = max(abs(pnl) * 0.3, 1)  # rough estimate for wins
                 if strat in s._trades and size > 0:
                     s._trades[strat].append({
-                        "won": pnl > 0, "pnl": pnl, "size": size
+                        "won": won, "pnl": pnl, "size": size
                     })
             # Recalculate trust for all strategies
             for st in s._strats:
                 s._recalc(st)
-            log.info(f"Manager loaded history: {', '.join(f'{st}={s._trust[st]:.2f}' for st in s._strats)}")
-        except:
-            pass  # no history, start fresh
+            loaded = {st: len(s._trades[st]) for st in s._strats if s._trades[st]}
+            log.info(f"Manager loaded history: {', '.join(f'{st}={s._trust[st]:.2f}({len(s._trades[st])}t)' for st in s._strats)}")
+        except Exception as e:
+            log.debug(f"Manager history load: {e}")  # no history, start fresh
 
     def record(s, strat, won, pnl, size):
         """Record a trade result and recalculate trust."""
@@ -1213,7 +1220,7 @@ class S_Latency:
         # CRITICAL: Only enter when price is reasonable
         # Below $0.12: market is 88%+ confident the other side wins — don't fight it
         # Above $0.45: risk/reward too poor (risk $0.45 for $0.55)
-        if target_price > 0.45 or target_price < 0.12: return None
+        if target_price > 0.40 or target_price < 0.12: return None
 
         # Other side shouldn't be too cheap (if both cheap → ARB handles it)
         other_price = m.no_p if up else m.yes_p
@@ -1349,8 +1356,8 @@ class S_Flash:
     def __init__(s, c): s.c = c
     def check(s, m, f, trend, token_feed=None, book_intel=None):
         if not s.c.flash_enabled or f.n < 10: return None
-        yes_cheap = 0.08 <= m.yes_p <= 0.22
-        no_cheap = 0.08 <= m.no_p <= 0.22
+        yes_cheap = 0.10 <= m.yes_p <= 0.22
+        no_cheap = 0.10 <= m.no_p <= 0.22
         if not yes_cheap and not no_cheap: return None
         tl = (m.end - datetime.now(timezone.utc)).total_seconds()
         if tl < 180: return None  # 3 min minimum
@@ -1659,7 +1666,7 @@ class Executor:
                 oid = resp.get("orderID") or resp.get("id") or resp.get("order_id") or "?"
                 status = resp.get("status", "")
                 log.info(f"LIMIT ORDER: ${maker_price*limit_size:.2f} {label} ({limit_size:.2f}sh @ ${maker_price}) id={oid} st={status}")
-                if oid != "?": return oid, None
+                if oid != "?": return oid, 0  # 0 shares = unfilled limit, NOT None
             elif isinstance(resp, str) and len(resp) > 5:
                 return resp, None
         except Exception as e:
@@ -1902,10 +1909,21 @@ class Risk:
         return s.available >= 1.0
     def open(s, t, market_end=None, actual_shares=None):
         shares = actual_shares if actual_shares else t.size / t.price
+        # If actual_shares is 0, this is an unfilled limit order
+        # Still track it so we can cancel/clean it up, but mark it
         p = Pos(id=t.oid, strat=t.strat, slug=t.slug, side=t.side,
-            entry=t.price, shares=shares, cost=t.size, opened=t.ts, market_end=market_end)
-        s.positions.append(p); s.trades.append(t); s.total_bet += t.size; return p
+            entry=t.price, shares=shares, cost=t.size if shares > 0 else 0,
+            opened=t.ts, market_end=market_end)
+        s.positions.append(p); s.trades.append(t)
+        if shares > 0: s.total_bet += t.size  # only count filled orders
+        return p
     def resolve(s, pos, won):
+        # v8.1: Skip cancelled/unfilled orders
+        if pos.shares <= 0 or pos.cost <= 0:
+            pos.pnl = 0.0; pos.status = "CANCELLED"
+            for t in s.trades:
+                if t.oid == pos.id: t.pnl = 0.0
+            return
         if won:
             gross_payout = pos.shares * 1.0
             fee = gross_payout * 0.02
@@ -1913,6 +1931,12 @@ class Risk:
             pnl = net_payout - pos.cost
         else:
             pnl = -pos.cost
+        # v8.1 SANITY CHECK: if "won" but pnl is less than -cost/2, 
+        # something went wrong (shares data was bad). Fall back to -cost.
+        if won and pnl < -(pos.cost * 0.5):
+            log.warning(f"Resolution sanity fail: won=True but pnl={pnl:.2f}, cost={pos.cost:.2f}, shares={pos.shares:.2f}. Forcing loss.")
+            pnl = -pos.cost
+            won = False
         pos.pnl = round(pnl, 2); pos.status = "WON" if won else "LOST"
         s.dpnl += pnl
         for t in s.trades:
@@ -2451,6 +2475,10 @@ class Bot:
                 s.momentum_guard.update(s.feed)
                 resolved = s.risk.check_exp(s.feed); s._cancel_exp()
                 for p in resolved:
+                    # v8.1: Skip cancelled/unfilled orders — don't corrupt learning
+                    if p.status == "CANCELLED" or p.cost <= 0:
+                        s.dash.ev(f"[{p.strat[:3]}] CANCELLED (unfilled)")
+                        continue
                     s.dash.ev(f"[{p.strat[:3]}] {p.status} P&L:{p.pnl:+.2f}")
                     # v6: Record in adaptive sizer
                     hour = p.opened.hour if p.opened else datetime.now(timezone.utc).hour
