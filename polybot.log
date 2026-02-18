@@ -587,3 +587,14 @@
 2026-02-18 07:04:54,998|INFO|Loaded 51 condition IDs for redemption
 2026-02-18 07:04:58,271|INFO|Auth OK type=1 funder=0xF9b8c919b97CbD5eb1d71b23B9915Df711860694
 2026-02-18 07:04:58,604|INFO|Updated STARTING_BALANCE to $9062.98
+2026-02-18 10:31:34,350|INFO|Loaded 56 historical trades for adaptive sizing
+2026-02-18 10:31:34,351|INFO|Cortex loaded: ARB=1.00, LATENCY=1.00, MEANREV=1.21, FLASH=0.55, SQUEEZE=1.00
+2026-02-18 10:31:34,354|INFO|Loaded 51 condition IDs for redemption
+2026-02-18 10:31:36,942|INFO|Auth OK type=1 funder=0xF9b8c919b97CbD5eb1d71b23B9915Df711860694
+2026-02-18 10:31:37,137|INFO|Updated STARTING_BALANCE to $8672.10
+2026-02-18 11:34:00,594|INFO|websocket-client not installed — using HTTP polling (pip install websocket-client for 20x faster feed)
+2026-02-18 11:34:00,595|INFO|Loaded 56 historical trades for adaptive sizing
+2026-02-18 11:34:00,596|INFO|Cortex loaded: ARB=1.00, LATENCY=1.00, MEANREV=1.21, FLASH=0.55, SQUEEZE=1.00, GRINDER=1.00
+2026-02-18 11:34:00,605|INFO|Loaded 50 condition IDs for redemption
+2026-02-18 11:34:02,857|INFO|Auth OK type=1 funder=0xF9b8c919b97CbD5eb1d71b23B9915Df711860694
+2026-02-18 11:34:03,022|INFO|Updated STARTING_BALANCE to $8672.10

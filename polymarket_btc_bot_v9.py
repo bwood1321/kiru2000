@@ -98,7 +98,7 @@ class Config:
         """Get base trade size — percentage of balance or fixed fallback."""
         pct_map = {"ARB": s.arb_pct, "LATENCY": s.latency_pct,
                    "MOMENTUM": s.momentum_pct, "MEANREV": s.momentum_pct, "FLASH": s.flash_pct,
-                   "SQUEEZE": s.squeeze_pct}
+                   "SQUEEZE": s.squeeze_pct, "GRINDER": 0.025}
         fixed_map = {"ARB": s.arb_size, "LATENCY": s.latency_size,
                      "MOMENTUM": s.momentum_size, "FLASH": s.flash_size}
         pct = pct_map.get(strat, 0.05)
@@ -146,7 +146,7 @@ class Pos:
     id: str; strat: str; slug: str; side: str
     entry: float; shares: float; cost: float
     pnl: float = 0.0; opened: datetime = None; status: str = "OPEN"
-    market_end: datetime = None
+    market_end: datetime = None; entry_regime: str = "UNKNOWN"
 
 @dataclass
 class Trd:
@@ -161,12 +161,69 @@ class Conn:
         s.errors.append(str(e)[:60])
         if len(s.errors) > 5: s.errors = s.errors[-5:]
 
-# ─── PRICE FEED ───
+# ─── PRICE FEED (v9.1: WebSocket primary, HTTP fallback) ───
+import threading
+try:
+    import websocket as _ws_lib
+    _HAS_WS = True
+except ImportError:
+    _HAS_WS = False
+    log.info("websocket-client not installed — using HTTP polling (pip install websocket-client for 20x faster feed)")
+
 class Feed:
+    """BTC price feed. Primary: Binance WebSocket (100ms updates).
+    Fallback: HTTP polling (if WS disconnects)."""
     def __init__(s):
-        s.data = deque(maxlen=500)
-        s.s = requests.Session(); s.s.headers["User-Agent"] = "PolyBot/7"
+        s.data = deque(maxlen=1000)  # More data points with WS speed
+        s.s = requests.Session(); s.s.headers["User-Agent"] = "PolyBot/9"
+        s._ws = None; s._ws_thread = None; s._ws_alive = False
+        s._ws_last = 0; s._ws_retries = 0
+        if _HAS_WS:
+            s._start_ws()
+    
+    def _start_ws(s):
+        """Start Binance WebSocket in background thread."""
+        def _run():
+            while True:
+                try:
+                    ws = _ws_lib.WebSocketApp(
+                        "wss://stream.binance.com:9443/ws/btcusdt@trade",
+                        on_message=s._on_ws_msg,
+                        on_error=lambda ws, e: log.debug(f"WS err: {e}"),
+                        on_close=lambda ws, c, m: setattr(s, '_ws_alive', False),
+                        on_open=lambda ws: setattr(s, '_ws_alive', True)
+                    )
+                    s._ws = ws
+                    ws.run_forever(ping_interval=30, ping_timeout=10)
+                except Exception as e:
+                    log.debug(f"WS connect fail: {e}")
+                s._ws_alive = False
+                s._ws_retries += 1
+                time.sleep(min(5 * s._ws_retries, 30))  # backoff
+        
+        s._ws_thread = threading.Thread(target=_run, daemon=True)
+        s._ws_thread.start()
+    
+    def _on_ws_msg(s, ws, msg):
+        """Handle incoming WebSocket trade message."""
+        try:
+            d = json.loads(msg)
+            p = float(d.get("p", 0))
+            if p > 0:
+                now = time.time()
+                # Throttle: max 5 updates/sec to avoid flooding deque
+                if now - s._ws_last >= 0.2:
+                    s.data.append({"t": now, "p": p})
+                    s._ws_last = now
+                    s._ws_retries = 0  # reset backoff on success
+        except: pass
+    
     def poll(s):
+        """Called every tick. If WS is alive and recent, skip HTTP.
+        If WS is stale (>5s), fall back to HTTP polling."""
+        if s._ws_alive and s._ws_last > 0 and (time.time() - s._ws_last) < 5:
+            return s.data[-1]["p"] if s.data else None
+        # HTTP fallback
         for fn in [s._b, s._c]:
             try:
                 p = fn()
@@ -183,6 +240,11 @@ class Feed:
     def price(s): return s.data[-1]["p"] if s.data else 0
     @property
     def n(s): return len(s.data)
+    @property
+    def ws_status(s):
+        """For dashboard display."""
+        if s._ws_alive and (time.time() - s._ws_last) < 5: return "WS"
+        return "HTTP"
     def arr(s, n=50):
         d = list(s.data)[-n:]
         return np.array([x["p"] for x in d]) if d else np.array([])
@@ -356,6 +418,9 @@ class TrendEngine:
                 trend_up = s.trend_dir > 0
                 with_trend = (side_is_yes and trend_up) or (not side_is_yes and not trend_up)
                 return (True, 1.5) if with_trend else (False, 0.0)
+
+        # GRINDER: near-certain outcome buying — always allowed, strategy does own safety checks
+        if strat == "GRINDER": return True, 1.0
 
         return True, 1.0
 
@@ -683,6 +748,96 @@ class WinStreakSizer:
 # ═══════════════════════════════════════════════════════════════
 # ─── v8: TOKEN PRICE FEED ───
 # ═══════════════════════════════════════════════════════════════
+
+# v9.1: Polymarket CLOB WebSocket — real-time token prices + order book
+class PolyWebSocket:
+    """Streams YES/NO price changes and order book updates from Polymarket.
+    Without this: HTTP poll every 2-10 seconds (stale data).
+    With this: instant updates when any order changes on the market."""
+    
+    def __init__(s):
+        s.yes_p = 0.0; s.no_p = 0.0
+        s.yes_bid = 0.0; s.yes_ask = 0.0
+        s.no_bid = 0.0; s.no_ask = 0.0
+        s._alive = False; s._thread = None
+        s._ws = None; s._asset_ids = []
+        s._last_update = 0; s._retries = 0
+        s._slug = None
+    
+    def subscribe(s, tok_yes, tok_no, slug=""):
+        """Subscribe to a new market. Call when market changes."""
+        s._asset_ids = [tok_yes, tok_no]
+        s._slug = slug
+        # Close existing connection — will auto-reconnect with new subscription
+        if s._ws:
+            try: s._ws.close()
+            except: pass
+        if not s._thread or not s._thread.is_alive():
+            s._start()
+    
+    def _start(s):
+        if not _HAS_WS: return
+        def _run():
+            while True:
+                try:
+                    ws = _ws_lib.WebSocketApp(
+                        "wss://ws-subscriptions-clob.polymarket.com/ws/market",
+                        on_message=s._on_msg,
+                        on_error=lambda ws, e: None,
+                        on_close=lambda ws, c, m: setattr(s, '_alive', False),
+                        on_open=s._on_open
+                    )
+                    s._ws = ws
+                    ws.run_forever(ping_interval=20, ping_timeout=10)
+                except: pass
+                s._alive = False
+                s._retries += 1
+                time.sleep(min(3 * s._retries, 15))
+        s._thread = threading.Thread(target=_run, daemon=True)
+        s._thread.start()
+    
+    def _on_open(s, ws):
+        s._alive = True; s._retries = 0
+        if s._asset_ids:
+            sub = {"assets_ids": s._asset_ids, "type": "market"}
+            ws.send(json.dumps(sub))
+            log.info(f"PolyWS subscribed to {len(s._asset_ids)} tokens")
+    
+    def _on_msg(s, ws, msg):
+        try:
+            data = json.loads(msg)
+            etype = data.get("event_type", "")
+            s._last_update = time.time()
+            
+            if etype == "price_change":
+                for ch in data.get("changes", []):
+                    price = float(ch.get("price", 0))
+                    side = ch.get("side", "")
+                    asset_id = data.get("asset_id", "")
+                    if asset_id == s._asset_ids[0]:  # YES token
+                        if side == "BUY": s.yes_bid = price
+                        elif side == "SELL": s.yes_ask = price
+                        s.yes_p = (s.yes_bid + s.yes_ask) / 2 if s.yes_bid and s.yes_ask else price
+                    elif len(s._asset_ids) > 1 and asset_id == s._asset_ids[1]:  # NO token
+                        if side == "BUY": s.no_bid = price
+                        elif side == "SELL": s.no_ask = price
+                        s.no_p = (s.no_bid + s.no_ask) / 2 if s.no_bid and s.no_ask else price
+            
+            elif etype == "last_trade_price":
+                price = float(data.get("price", 0))
+                asset_id = data.get("asset_id", "")
+                if price > 0:
+                    if asset_id == s._asset_ids[0]:
+                        s.yes_p = price
+                    elif len(s._asset_ids) > 1 and asset_id == s._asset_ids[1]:
+                        s.no_p = price
+        except: pass
+    
+    @property
+    def is_live(s):
+        return s._alive and s._last_update > 0 and (time.time() - s._last_update) < 10
+
+
 class TokenFeed:
     """Tracks Polymarket YES/NO prices as a time series.
     Enables: divergence detection, token momentum, smart money signals.
@@ -916,7 +1071,7 @@ class Cortex:
     KEY PRINCIPLE: Optimize for EV, not win rate.
     Never reduce Latency/Squeeze below 1.0x. Boost, don't restrict."""
 
-    STRATS = ["ARB", "LATENCY", "MEANREV", "FLASH", "SQUEEZE"]
+    STRATS = ["ARB", "LATENCY", "MEANREV", "FLASH", "SQUEEZE", "GRINDER"]
     # Which regimes favor which strategies (from real trade data)
     REGIME_AFFINITY = {
         "LATENCY":  {"TRENDING_UP": 1.3, "TRENDING_DOWN": 1.3, "BREAKOUT": 1.5, "FLAT": 0.8, "CHOPPY": 0.7},
@@ -1409,9 +1564,11 @@ class Cortex:
         return 0.7 if s._in_danger else 1.0
 
     def get_max_entry(s, strat):
-        """Tighter entry requirements for low-trust strategies."""
+        """Tighter entry requirements for low-trust strategies.
+        GRINDER exempt: it enters at $0.82-$0.92 by design, trust can't change that."""
+        if strat == "GRINDER": return 0.92  # Grinder always needs high entry
         trust = s._trust.get(strat, 1.0)
-        defaults = {"ARB": 0.38, "LATENCY": 0.30, "MEANREV": 0.22, "FLASH": 0.22, "SQUEEZE": 0.20}
+        defaults = {"ARB": 0.38, "LATENCY": 0.25, "MEANREV": 0.22, "FLASH": 0.22, "SQUEEZE": 0.20}
         base = defaults.get(strat, 0.25)
         if trust < 0.5:
             return base * 0.75  # tighten by 25% for untrusted
@@ -1666,16 +1823,21 @@ class S_Latency:
         min_chg = 0.0007 if (trend and trend.regime == "BREAKOUT") else 0.0010
         if abs(chg) < min_chg: return None
 
+        # v9.1: HARD BLOCK in FLAT — data: 0W/2L, -$1,386
+        # Latency needs a strong directional move. FLAT = no edge = gambling.
+        if trend and trend.regime == "FLAT":
+            return None
+
         up = chg > 0
         # The side we want: BTC up → buy YES (if cheap), BTC down → buy NO (if cheap)
         target_price = m.yes_p if up else m.no_p
 
         # CRITICAL: Only enter when price is reasonable
         # Below $0.12: market is 88%+ confident the other side wins — don't fight it
-        # v9.1: Above $0.30: risk/reward not good enough. Was $0.40.
-        # Data: $0.34 entry lost $642, $0.36 lost $524, $0.27 lost $743.
-        # At $0.30 max, R:R is at least 2.3:1. Below that, speed edge isn't enough.
-        if target_price > 0.30 or target_price < 0.12: return None
+        # v9.1: Above $0.25: risk/reward not good enough. Was $0.30.
+        # Data: avg LATENCY loss = $316, the biggest of all strategies.
+        # At $0.25 max, R:R is 3:1. Better risk profile, smaller max loss.
+        if target_price > 0.25 or target_price < 0.12: return None
 
         # Other side shouldn't be too cheap (if both cheap → ARB handles it)
         other_price = m.no_p if up else m.yes_p
@@ -1811,30 +1973,39 @@ class S_Flash:
     def __init__(s, c): s.c = c
     def check(s, m, f, trend, token_feed=None, book_intel=None):
         if not s.c.flash_enabled or f.n < 10: return None
-        yes_cheap = 0.10 <= m.yes_p <= 0.22
-        no_cheap = 0.10 <= m.no_p <= 0.22
+        # v9.1: Raised min from $0.10 to $0.15 — data shows $0.10-$0.15 entries are 17% WR, -$921
+        # These look "cheap" but they're traps: $0.10 YES in downtrend = 90% market says DOWN
+        yes_cheap = 0.15 <= m.yes_p <= 0.22
+        no_cheap = 0.15 <= m.no_p <= 0.22
         if not yes_cheap and not no_cheap: return None
         tl = (m.end - datetime.now(timezone.utc)).total_seconds()
         if tl < 180: return None  # 3 min minimum
         if tl > 720: return None  # v8.1: Wait at least 3 min into market before entering
-                                   # Early regime is unreliable, prices are wild
 
-        btc_chg = f.chg(120)  # 2-min direction
+        # v9.1: REQUIRE meaningful BTC move — Flash should only fire on CLEAR direction
+        # Data shows Flash losses come from tiny moves that immediately reverse
+        btc_2m = f.chg(120)
+        btc_1m = f.chg(60)
+        btc_move = max(abs(btc_2m), abs(btc_1m))
+        if btc_move < 0.0015:  # Less than 0.15% move = not a real signal
+            return None
 
-        # v6.2 FIX: Don't buy against a strong regime
         regime = trend.regime if trend else ""
         strong_up = regime in ("TRENDING_UP",) or (regime == "BREAKOUT" and trend.trend_dir > 0)
         strong_down = regime in ("TRENDING_DOWN",) or (regime == "BREAKOUT" and trend.trend_dir < 0)
 
-        # v8: VOLATILITY GATE — prefer low/normal volatility for mean reversion
+        # v9.1: HARD BLOCK Flash in TRENDING_DOWN — data: 3W/8L, -$1,486
+        # This is the #1 money loser across ALL strategies
+        if regime == "TRENDING_DOWN":
+            return None
+
+        # v8: VOLATILITY GATE — prefer low/normal volatility
         vol_ok = True
         if trend and trend.volatility_regime == "HIGH":
-            vol_ok = False  # too chaotic, skip unless extreme value
+            vol_ok = False
 
-        # YES cheap → BTC dropped → buy YES if MULTIPLE confirmations agree
+        # YES cheap → BTC dropped then recovering → buy YES
         if yes_cheap and not strong_down:
-            # v8.1: Score 3 independent confirmations, need 2 to enter
-            # This was the #1 fix — Flash was entering with just BTC direction
             book_confirms = True
             if book_intel and book_intel.yes_ask_depth > 0:
                 if book_intel.selling_pressure("YES"):
@@ -1846,20 +2017,15 @@ class S_Flash:
                 if vel < -0.005:
                     vel_confirms = False
 
-            recovering = f.chg(30) > 0
-            flat_enough = btc_chg > -0.02
-            btc_confirms = recovering or (flat_enough and trend.trend_dir >= 0)
+            # v9.1: Stricter BTC confirmation — need actual recovery, not just "flat enough"
+            recovering = f.chg(30) > 0.0003  # BTC actively bouncing (not just flat)
+            btc_confirms = recovering and trend.trend_dir >= 0
 
             confirms = sum([btc_confirms, book_confirms, vel_confirms])
-            if confirms >= 2:
-                if vol_ok or m.yes_p <= 0.15:
-                    return {"s": "FLASH", "dir": "YES", "yes": True, "price": m.yes_p, "sz": 0}
-
-            # Extreme value: $0.10-0.15 = great R:R, needs only 1 confirmation
-            if 0.10 <= m.yes_p < 0.15 and flat_enough and not strong_down and confirms >= 1:
+            if confirms >= 2 and vol_ok:
                 return {"s": "FLASH", "dir": "YES", "yes": True, "price": m.yes_p, "sz": 0}
 
-        # NO cheap → BTC pumped → buy NO if MULTIPLE confirmations agree
+        # NO cheap → BTC pumped then fading → buy NO
         if no_cheap and not strong_up:
             book_confirms = True
             if book_intel and book_intel.no_ask_depth > 0:
@@ -1872,16 +2038,12 @@ class S_Flash:
                 if vel < -0.005:
                     vel_confirms = False
 
-            pulling_back = f.chg(30) < 0
-            flat_enough = btc_chg < 0.02
-            btc_confirms = pulling_back or (flat_enough and trend.trend_dir <= 0)
+            # v9.1: Stricter — need actual pullback, not just "flat enough"
+            pulling_back = f.chg(30) < -0.0003  # BTC actively dropping
+            btc_confirms = pulling_back and trend.trend_dir <= 0
 
             confirms = sum([btc_confirms, book_confirms, vel_confirms])
-            if confirms >= 2:
-                if vol_ok or m.no_p <= 0.15:
-                    return {"s": "FLASH", "dir": "NO", "yes": False, "price": m.no_p, "sz": 0}
-
-            if 0.10 <= m.no_p < 0.15 and flat_enough and not strong_up and confirms >= 1:
+            if confirms >= 2 and vol_ok:
                 return {"s": "FLASH", "dir": "NO", "yes": False, "price": m.no_p, "sz": 0}
 
         return None
@@ -1930,6 +2092,11 @@ class S_Squeeze:
         strong_up = regime in ("TRENDING_UP",) or (regime == "BREAKOUT" and trend.trend_dir > 0)
         strong_down = regime in ("TRENDING_DOWN",) or (regime == "BREAKOUT" and trend.trend_dir < 0)
 
+        # v9.1: HARD BLOCK in TRENDING_DOWN — data: 1W/5L, -$832
+        # Squeeze is a reversal play. In a strong trend, the reversal rarely comes.
+        if regime == "TRENDING_DOWN":
+            return None
+
         # YES very cheap → buy if BTC turning up (and not strong downtrend)
         if yes_cheap and not strong_down:
             turning_up = f.chg(30) > 0.0003
@@ -1951,6 +2118,87 @@ class S_Squeeze:
                         "fired": True, "sz": 0}
 
         return None
+
+
+class S_Grinder:
+    """v9.1: GRINDER — Near-Certain Outcome Buying.
+    
+    Research: Multiple sources confirm this is a proven profitable strategy.
+    "Focus exclusively on near-certain outcomes priced $0.82-$0.92. Thousands of
+    micro-trades accumulate small wins that compound over time. Works especially
+    well in short-duration crypto markets." — andrew.ooo / datawallet analysis
+    
+    The OPPOSITE of our other strategies. Instead of buying cheap tokens ($0.10-$0.22)
+    and hoping they go to $1.00, we buy EXPENSIVE tokens ($0.82-$0.92) when the
+    outcome is nearly certain, and collect the guaranteed $1.00 payout.
+    
+    Logic:
+    1. Last 3 min of market (outcome is largely decided)
+    2. BTC has moved 0.30%+ from market open in one direction
+    3. The winning side is priced $0.82-$0.92 (profit after 2% fee)
+    4. BTC hasn't shown reversal signs in last 60 seconds
+    5. Buy the winning side → collect $1.00 at expiry
+    
+    Expected: 85-95% WR, small profits ($15-$30 per trade), very rare losses.
+    This creates a steady income floor while other strategies swing for big wins."""
+    
+    def __init__(s, c):
+        s.c = c
+        s._last_signal = 0
+    
+    def check(s, m, f, trend):
+        if f.n < 30: return None
+        tl = (m.end - datetime.now(timezone.utc)).total_seconds()
+        
+        # Only in last 3 minutes, not last 45 seconds (too late to fill)
+        if tl > 180 or tl < 45: return None
+        
+        # Cooldown: one signal per market maximum
+        if time.time() - s._last_signal < 120: return None
+        
+        # How much has BTC moved from market open?
+        chg_open = 0
+        if m.open_btc > 0:
+            chg_open = (f.price - m.open_btc) / m.open_btc
+        
+        # Need a CLEAR move — 0.30%+ from market open
+        if abs(chg_open) < 0.003: return None
+        
+        btc_up = chg_open > 0
+        
+        # The side that SHOULD win
+        winning_price = m.yes_p if btc_up else m.no_p
+        winning_side = "YES" if btc_up else "NO"
+        is_yes = btc_up
+        
+        # Must be in the sweet spot: $0.82-$0.92
+        # Below $0.82 = market is not confident enough (too risky)
+        # Above $0.92 = not enough profit after 2% fee ($0.98 - $0.92 = $0.06 = 6.5% return)
+        if winning_price < 0.82 or winning_price > 0.92: return None
+        
+        # SAFETY CHECK 1: BTC still moving in our direction in last 60s
+        # If BTC started reversing, skip — the "near-certain" is no longer certain
+        btc_60s = f.chg(60)
+        if btc_up and btc_60s < -0.001: return None   # BTC reversing down
+        if not btc_up and btc_60s > 0.001: return None  # BTC reversing up
+        
+        # SAFETY CHECK 2: Trend engine agrees
+        if trend:
+            if btc_up and trend.trend_dir < 0: return None  # trend engine says down
+            if not btc_up and trend.trend_dir > 0: return None  # trend engine says up
+        
+        # SAFETY CHECK 3: Don't grind in HIGH volatility — flash crashes happen
+        if trend and trend.volatility_regime == "HIGH": return None
+        
+        s._last_signal = time.time()
+        profit_per_token = 0.98 - winning_price  # after 2% fee
+        
+        return {
+            "s": "GRINDER", "dir": winning_side, "yes": is_yes,
+            "price": winning_price, "chg_open": chg_open,
+            "profit_pct": profit_per_token / winning_price * 100,
+            "tl": tl, "sz": 0
+        }
 
 
 # ─── MARKET FINDER ───
@@ -2362,15 +2610,23 @@ class Risk:
             if real_loss >= s.c.max_daily_loss: return False
         if len([p for p in s.positions if p.status == "OPEN"]) >= s.c.max_positions: return False
         return s.available >= 1.0
-    def open(s, t, market_end=None, actual_shares=None):
+    def open(s, t, market_end=None, actual_shares=None, entry_regime="UNKNOWN"):
         shares = actual_shares if actual_shares else (t.size / t.price if t.price > 0 else 0)
-        # Use actual fill price if we have actual shares data
-        actual_entry = (t.size / shares) if (actual_shares and shares > 0) else t.price
+        # Sanity check: if actual_shares gives a crazy entry price, fall back to t.price
+        if actual_shares and shares > 0:
+            computed_entry = t.size / shares
+            if 0.01 <= computed_entry <= 0.99:
+                actual_entry = computed_entry
+            else:
+                actual_entry = t.price  # API returned garbage, use intended price
+                shares = t.size / t.price if t.price > 0 else 0  # recalc shares too
+        else:
+            actual_entry = t.price
         # If actual_shares is 0, this is an unfilled limit order
         # Still track it so we can cancel/clean it up, but mark it
         p = Pos(id=t.oid, strat=t.strat, slug=t.slug, side=t.side,
             entry=round(actual_entry, 4), shares=shares, cost=t.size if shares > 0 else 0,
-            opened=t.ts, market_end=market_end)
+            opened=t.ts, market_end=market_end, entry_regime=entry_regime)
         s.positions.append(p); s.trades.append(t)
         if shares > 0: s.total_bet += t.size  # only count filled orders
         return p
@@ -2518,7 +2774,7 @@ class Dash:
     def ev(s, e): s.evts.append(f"{datetime.now().strftime('%H:%M:%S')} {e}")
     def render(s, c, conn, f, risk, mkt, strats, scores, orders, poly_pos,
                start_time=None, past_trades=None, trend=None, sizer=None,
-               cortex=None):
+               cortex=None, poly_ws=None):
         os.system("cls" if os.name == "nt" else "clear")
         now = datetime.now().strftime("%H:%M:%S")
         rt = ""
@@ -2674,8 +2930,10 @@ class Dash:
             c1 = OK if chg1 > 0.02 else ERR if chg1 < -0.02 else DIM
             c5 = OK if chg5 > 0.02 else ERR if chg5 < -0.02 else DIM
 
-            print(f"\n  {LBL}BTC{R}  {BTC}${f.price:,.2f}{R}  {c1}{chg1:+.2f}%{R} 1m  {c5}{chg5:+.2f}%{R} 5m  {DIM}vol:{VAL}{f.volatility()*100:.3f}%{R}")
-            print(f"  {LBL}MKT{R}  {OK}Y ${mkt.yes_p:.2f}{R}  {ERR}N ${mkt.no_p:.2f}{R}  Σ{VAL}${mkt.yes_p + mkt.no_p:.3f}{R}  {time_bar} {VAL}{mins_left}:{secs_left:02d}{R}")
+            ws_tag = f"{OK}⚡WS{R}" if f.ws_status == "WS" else f"{WARN}HTTP{R}"
+            print(f"\n  {LBL}BTC{R}  {BTC}${f.price:,.2f}{R}  {c1}{chg1:+.2f}%{R} 1m  {c5}{chg5:+.2f}%{R} 5m  {DIM}vol:{VAL}{f.volatility()*100:.3f}%{R}  {ws_tag}")
+            pws_tag = f"{OK}⚡WS{R}" if (poly_ws and poly_ws.is_live) else f"{WARN}HTTP{R}"
+            print(f"  {LBL}MKT{R}  {OK}Y ${mkt.yes_p:.2f}{R}  {ERR}N ${mkt.no_p:.2f}{R}  Σ{VAL}${mkt.yes_p + mkt.no_p:.3f}{R}  {time_bar} {VAL}{mins_left}:{secs_left:02d}{R}  {pws_tag}")
 
         # Trend + AI line
         if trend:
@@ -2693,7 +2951,7 @@ class Dash:
         print(f"\n  {H1}┌{'─'*62}┐{R}")
         print(f"  {H1}│{R}  {LBL}STRATEGIES{R}                                                       {H1}│{R}")
         print(f"  {H1}├{'─'*62}┤{R}")
-        icons = {"ARB": "♦", "LATENCY": "⚡", "MEANREV": "↩", "FLASH": "⚡", "SQUEEZE": "◈"}
+        icons = {"ARB": "♦", "LATENCY": "⚡", "MEANREV": "↩", "FLASH": "⚡", "SQUEEZE": "◈", "GRINDER": "◉"}
         for k, v in strats.items():
             ic = icons.get(k, "•")
             paused = sizer and sizer.is_paused(k)
@@ -2829,6 +3087,7 @@ class Bot:
         # v8: Market intelligence
         s.token_feed = TokenFeed()
         s.book_intel = OrderBookIntel()
+        s.poly_ws = PolyWebSocket()  # v9.1: Real-time Polymarket prices
         s.market_losses = MarketLossTracker()
         # v9: The Cortex — unified intelligence
         s.cortex = Cortex()
@@ -2838,8 +3097,8 @@ class Bot:
         s.cortex.trend = s.trend
         s.data = DataCollector()
         # Strategies
-        s.s1 = S_Arb(s.c); s.s2 = S_Latency(s.c); s.s3 = S_MeanReversion(s.c); s.s4 = S_Flash(s.c); s.s5 = S_Squeeze(s.c)
-        s.mkt = None; s.strats = {"ARB": "...", "LATENCY": "...", "MEANREV": "...", "FLASH": "...", "SQUEEZE": "..."}
+        s.s1 = S_Arb(s.c); s.s2 = S_Latency(s.c); s.s3 = S_MeanReversion(s.c); s.s4 = S_Flash(s.c); s.s5 = S_Squeeze(s.c); s.s6 = S_Grinder(s.c)
+        s.mkt = None; s.strats = {"ARB": "...", "LATENCY": "...", "MEANREV": "...", "FLASH": "...", "SQUEEZE": "...", "GRINDER": "..."}
         s.cd = {}; s._traded_cids = set()
         s.start_time = time.time()
         s._logged_positions = set()
@@ -3095,6 +3354,8 @@ class Bot:
         print(f"    Directional Bias: {OK}Active{R} (reduces side that keeps losing in session)")
         print(f"    Recovery Detection: {OK}Active{R} (snaps back sizing after 2 consecutive wins)")
         print(f"    Lifecycle Model: {OK}Active{R} (learns price patterns at min 2/4/6/8/10/12)")
+        print(f"    Grinder: {OK}Active{R} (near-certain outcome buying, last 3 min, $0.82-$0.92)")
+        print(f"    Max 3 Trades/Market: {OK}Active{R} (hard cap on total trades per 15m window)")
         # v9.1: Show actual data loaded
         cortex_trades = sum(len(v) for v in s.cortex._trades.values())
         regime_combos = len(s.cortex._regime_perf)
@@ -3136,7 +3397,8 @@ class Bot:
                         continue
                     # v6: Record in adaptive sizer
                     hour = p.opened.hour if p.opened else datetime.now(timezone.utc).hour
-                    s.sizer.record(p.strat, p.side, p.pnl > 0, p.pnl, p.entry, hour, s.trend.regime,
+                    s.sizer.record(p.strat, p.side, p.pnl > 0, p.pnl, p.entry, hour, 
+                                   p.entry_regime if p.entry_regime != "UNKNOWN" else (s.trend.regime if s.trend else "UNKNOWN"),
                                    btc_price=s.feed.price if s.feed else 0)
                     # v7: Track win streak
                     s.win_streak.record(p.pnl > 0)
@@ -3174,7 +3436,12 @@ class Bot:
                     if p.status != "OPEN": s._log_trade(p)
                 if s.mkt:
                     try:
-                        yp, np_ = s.ex.prices(s.mkt); s.mkt.yes_p, s.mkt.no_p = yp, np_
+                        # v9.1: Prefer WebSocket prices (instant), fall back to HTTP
+                        if s.poly_ws.is_live and s.poly_ws.yes_p > 0 and s.poly_ws.no_p > 0:
+                            yp, np_ = s.poly_ws.yes_p, s.poly_ws.no_p
+                        else:
+                            yp, np_ = s.ex.prices(s.mkt)
+                        s.mkt.yes_p, s.mkt.no_p = yp, np_
                         # v8: Update token price feed
                         s.token_feed.update(s.mkt.slug, yp, np_)
                     except: pass
@@ -3209,6 +3476,9 @@ class Bot:
                                 m.open_btc = s.feed.price if s.feed.price else 0
                                 s.dash.ev(f"New market: {m.slug[-20:]}")
                                 s.s1.reset(m.slug)
+                                # v9.1: Subscribe Polymarket WebSocket to new market
+                                if m.tok_yes and m.tok_no:
+                                    s.poly_ws.subscribe(m.tok_yes, m.tok_no, m.slug)
                             if s.conn.can_trade or s.c.dry_run: s._trade(m)
                 if ctr % 30 == 0 and s.ex.authed:
                     rb = s.ex.get_balance()
@@ -3231,7 +3501,7 @@ class Bot:
                     s._cleanup()
                 s.dash.render(s.c, s.conn, s.feed, s.risk, s.mkt, s.strats, s.s3.scores,
                     s._orders, s._poly_pos, s.start_time, s._past_trades, s.trend, s.sizer,
-                    cortex=s.cortex)
+                    cortex=s.cortex, poly_ws=s.poly_ws)
                 time.sleep(s.c.poll_sec)
             except KeyboardInterrupt:
                 s.ex.cancel_all(); s._auto_redeem(); s._close_history(); s.cortex._save_lifecycle(); s._summary(); break
@@ -3320,7 +3590,10 @@ class Bot:
         # ── POSITION AWARENESS ──
         open_here = [p for p in s.risk.positions if p.status == "OPEN" and p.slug == m.slug]
         open_count = len(open_here)
-        if open_count >= 3: return  # v8.1: max 3 positions per market
+        # v9.1: Count ALL trades on this market (open + resolved) for hard cap
+        resolved_count = len([p for p in s.risk.positions if p.status != "OPEN" and p.slug == m.slug])
+        total_market_trades = open_count + resolved_count
+        if total_market_trades >= 3: return  # v9.1: max 3 TOTAL trades per market
 
         # v7.1: 30-second minimum gap between entries on same market
         # Checks ALL trades (not just same strategy) to prevent pile-in
@@ -3413,7 +3686,7 @@ class Bot:
             market_penalty = 0.0  # 2 open + a resolved loss = stop adding
         if market_penalty <= 0.0:
             # 2+ losses on this market — sit it out, wait for next market
-            for strat_key in ["LATENCY", "FLASH", "MEANREV", "SQUEEZE", "ARB"]:
+            for strat_key in ["LATENCY", "FLASH", "MEANREV", "SQUEEZE", "ARB", "GRINDER"]:
                 s.strats[strat_key] = "market stopped (2L)"
             return
 
@@ -3456,6 +3729,9 @@ class Bot:
             # Side lock: must match existing direction
             if locked_side and side != locked_side:
                 return False, f"side lock ({locked_side})", 0
+            # v9.1: Hard cap 3 total trades per market (across ALL strategies)
+            if open_count + resolved_count >= 3:
+                return False, "market cap (3 trades)", 0
             # Market risk cap
             remaining_risk = max_market_risk - market_risk
             if remaining_risk < 1.0 and open_count > 0:
@@ -3494,7 +3770,7 @@ class Bot:
                     oid, actual_shares = s.ex.order(m, sig["yes"], sig["price"], shares)
                     if oid:
                         t = Trd(datetime.now(timezone.utc), "ARB", m.slug, sig["side"], sig["price"], sz, oid=oid)
-                        s.risk.open(t, market_end=m.end, actual_shares=actual_shares)
+                        s.risk.open(t, market_end=m.end, actual_shares=actual_shares, entry_regime=s.trend.regime if s.trend else "UNKNOWN")
                         if m.cid: s._traded_cids.add(m.cid); s._save_traded_cids()
                         s._beep()
                     # Don't return — let other strategies also check this tick
@@ -3535,7 +3811,7 @@ class Bot:
                             oid, actual_shares = s.ex.order(m, sig["yes"], p, sh)
                             if oid:
                                 t = Trd(datetime.now(timezone.utc), "LATENCY", m.slug, sig["dir"], p, sz, oid=oid)
-                                s.risk.open(t, market_end=m.end, actual_shares=actual_shares); s.cd["lat"] = time.time()
+                                s.risk.open(t, market_end=m.end, actual_shares=actual_shares, entry_regime=s.trend.regime if s.trend else "UNKNOWN"); s.cd["lat"] = time.time()
                                 if m.cid: s._traded_cids.add(m.cid); s._save_traded_cids()
                                 # v7: Record conviction
                                 s.conviction.record_signal(m.slug, "LATENCY", sig["dir"])
@@ -3580,7 +3856,7 @@ class Bot:
                             oid, actual_shares = s.ex.order(m, sig["yes"], p, sh)
                             if oid:
                                 t = Trd(datetime.now(timezone.utc), "MEANREV", m.slug, sig["dir"], p, sz, oid=oid)
-                                s.risk.open(t, market_end=m.end, actual_shares=actual_shares); s.cd["mrev"] = time.time()
+                                s.risk.open(t, market_end=m.end, actual_shares=actual_shares, entry_regime=s.trend.regime if s.trend else "UNKNOWN"); s.cd["mrev"] = time.time()
                                 if m.cid: s._traded_cids.add(m.cid); s._save_traded_cids()
                                 s.conviction.record_signal(m.slug, "MEANREV", sig["dir"])
                                 s._beep()
@@ -3610,6 +3886,9 @@ class Bot:
                         sz = sz * conv_bonus * streak_mult * tod_mult * market_penalty
                         sz = sz * s.cortex.get_trust("FLASH") * s.cortex.get_macro_mult(sig.get("dir", sig.get("side", "YES"))) * s.cortex.get_session_mult() * s.cortex.get_danger_mult() * s.cortex.get_side_mult(sig["dir"]) * (lc_yes if sig["dir"] == "YES" else lc_no)  # v9: Cortex + Lifecycle
                         sz = min(sz, av, max_market_risk - market_risk, hard_max)
+                        # v9.1: Flash hard cap $250 — data: $400-$570 Flash bets lost -$1,964 total
+                        # Flash is a VALUE play, not a SIZE play. Keep bets small, let R:R do the work.
+                        sz = min(sz, 250.0)
                         if sz >= 1.0:
                             bonus_tag = f" CONV:{conv_bonus:.1f}x" if conv_bonus > 1 else ""
                             s.strats["FLASH"] = f"ACTIVE {sig['dir']} @ ${p:.4f}{bonus_tag}"
@@ -3619,7 +3898,7 @@ class Bot:
                             oid, actual_shares = s.ex.order(m, sig["yes"], p, sh)
                             if oid:
                                 t = Trd(datetime.now(timezone.utc), "FLASH", m.slug, sig["dir"], p, sz, oid=oid)
-                                s.risk.open(t, market_end=m.end, actual_shares=actual_shares); s.cd["flash"] = time.time()
+                                s.risk.open(t, market_end=m.end, actual_shares=actual_shares, entry_regime=s.trend.regime if s.trend else "UNKNOWN"); s.cd["flash"] = time.time()
                                 if m.cid: s._traded_cids.add(m.cid); s._save_traded_cids()
                                 s.conviction.record_signal(m.slug, "FLASH", sig["dir"])
                                 s._beep()
@@ -3659,7 +3938,7 @@ class Bot:
                             oid, actual_shares = s.ex.order(m, sig["yes"], p, sh)
                             if oid:
                                 t = Trd(datetime.now(timezone.utc), "SQUEEZE", m.slug, sig["dir"], p, sz, oid=oid)
-                                s.risk.open(t, market_end=m.end, actual_shares=actual_shares); s.cd["sqz"] = time.time()
+                                s.risk.open(t, market_end=m.end, actual_shares=actual_shares, entry_regime=s.trend.regime if s.trend else "UNKNOWN"); s.cd["sqz"] = time.time()
                                 if m.cid: s._traded_cids.add(m.cid); s._save_traded_cids()
                                 s.conviction.record_signal(m.slug, "SQUEEZE", sig["dir"])
                                 s._beep()
@@ -3672,6 +3951,43 @@ class Bot:
                     s.strats["SQUEEZE"] = f"watching ({int(tl_now)}s left)"
                 else:
                     s.strats["SQUEEZE"] = f"waiting (<5min)"
+
+        # ── S6: GRINDER → Near-certain outcome buying (last 3 min) ──
+        # Research: "Focus on near-certain outcomes priced $0.82-$0.92. Works especially
+        # well in short-duration crypto markets." High WR, small profits, steady income.
+        sig = s.s6.check(m, s.feed, s.trend)
+        if sig and not s.sizer.is_paused("GRINDER"):
+            p = sig["price"]
+            ok, reason, same_count = allowed("GRINDER", sig["dir"], p)
+            if not ok:
+                s.strats["GRINDER"] = reason
+            else:
+                # Size: 2-3% of balance — small because profit per trade is small
+                base = s.risk.show_bal * 0.025
+                sz = base * s.cortex.get_trust("GRINDER") * s.cortex.get_session_mult() * s.cortex.get_danger_mult()
+                sz = min(sz, av, max_market_risk - market_risk, hard_max)
+                # Hard cap at 3% of balance
+                sz = min(sz, s.risk.show_bal * 0.03)
+                if sz >= 1.0:
+                    profit_pct = sig.get("profit_pct", 0)
+                    s.strats["GRINDER"] = f"ACTIVE {sig['dir']} @ ${p:.2f} +{profit_pct:.1f}%"
+                    sh = max(sz / p, 5.0)
+                    if sh * p > av: sh = av / p
+                    s.dash.ev(f"[GRIND] {sig['dir']} ${sz:.2f} @ ${p:.2f} +{profit_pct:.1f}%")
+                    oid, actual_shares = s.ex.order(m, sig["yes"], p, sh)
+                    if oid:
+                        t = Trd(datetime.now(timezone.utc), "GRINDER", m.slug, sig["dir"], p, sz, oid=oid)
+                        s.risk.open(t, market_end=m.end, actual_shares=actual_shares, entry_regime=s.trend.regime if s.trend else "UNKNOWN")
+                        if m.cid: s._traded_cids.add(m.cid); s._save_traded_cids()
+                        s._beep()
+                else:
+                    s.strats["GRINDER"] = f"signal {sig['dir']} sz too small"
+        else:
+            tl_now = (m.end - datetime.now(timezone.utc)).total_seconds() if m.end else 999
+            if sig is None and tl_now <= 180:
+                s.strats["GRINDER"] = f"scanning ({int(tl_now)}s left)"
+            elif tl_now > 180:
+                s.strats["GRINDER"] = f"waiting (<3min)"
 
     def _summary(s):
         os.system("cls" if os.name == "nt" else "clear")
