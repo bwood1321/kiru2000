@@ -494,3 +494,96 @@
 2026-02-17 15:07:26,009|INFO|Updated STARTING_BALANCE to $8634.31
 2026-02-17 15:09:43,918|INFO|MARKET ORDER: $55.85 YES id=0xcb4f7393e0207b06715fdecd6d2eca7ae841429d156cf8cca92d3c984310dbb3 st=matched shares=281.24
 2026-02-17 15:18:48,283|DEBUG|Redeem check fail: ('execution reverted: Too many requests, reason: call rate limit exhausted, retry in 10s', {'trace_id': '71da7e6a14557d4ad40ce16626d02c7d'})
+2026-02-17 22:08:03,197|INFO|Loaded 42 historical trades for adaptive sizing
+2026-02-17 22:08:03,198|INFO|Cortex loaded: ARB=1.00, LATENCY=1.00, MEANREV=1.00, FLASH=0.83, SQUEEZE=1.00
+2026-02-17 22:08:03,199|INFO|Loaded 44 condition IDs for redemption
+2026-02-17 22:08:03,911|INFO|Auth OK type=1 funder=0xF9b8c919b97CbD5eb1d71b23B9915Df711860694
+2026-02-17 22:08:03,960|INFO|Updated STARTING_BALANCE to $8688.56
+2026-02-17 22:08:30,078|INFO|MARKET ORDER: $183.92 YES id=0xe50dad30b1d82913700804a8f4741e35cd2902d95b2c16b9e31d9bbaed5745b8 st=matched shares=807.22375
+2026-02-17 22:12:12,396|DEBUG|Redeem check fail: {'code': -32090, 'message': 'Too many requests, reason: call rate limit exhausted, retry in 10s', 'data': {'trace_id': '70cd297e62c918479d9b4af24f9c5fa4'}}
+2026-02-17 22:20:02,546|INFO|BTC fallback btc-updown-15m-1771365600: open=$67557.90 close=$67643.65 UP side=YES → WON
+2026-02-17 22:37:15,942|DEBUG|Redeem check fail: {'code': -32090, 'message': 'Too many requests, reason: call rate limit exhausted, retry in 10s', 'data': {'trace_id': 'a85c5753ccfa847f77553abc0dbfbc94'}}
+2026-02-17 22:54:02,614|DEBUG|Redeem check fail: {'code': -32090, 'message': 'Too many requests, reason: call rate limit exhausted, retry in 10s', 'data': {'trace_id': '2d5df8091151bd32d226a24b66d96167'}}
+2026-02-17 22:54:28,198|DEBUG|Cleanup: removed 1 old positions, 0 stale confirms
+2026-02-17 23:14:51,251|DEBUG|Redeem check fail: {'code': -32090, 'message': 'Too many requests, reason: call rate limit exhausted, retry in 10s', 'data': {'trace_id': 'e4c3cf7dbfa4a4dc2e821ce64fbd12ed'}}
+2026-02-17 23:31:41,154|DEBUG|Redeem check fail: {'code': -32090, 'message': 'Too many requests, reason: call rate limit exhausted, retry in 10s', 'data': {'trace_id': '3b055d0a50d3efa0f92b2ba62e0121b5'}}
+2026-02-18 00:09:01,107|DEBUG|Redeem check fail: {'code': -32090, 'message': 'Too many requests, reason: call rate limit exhausted, retry in 10s', 'data': {'trace_id': 'fb26aef76d7bedf9f0afd964ec038091'}}
+2026-02-18 00:38:01,316|DEBUG|Redeem check fail: {'code': -32090, 'message': 'Too many requests, reason: call rate limit exhausted, retry in 10s', 'data': {'trace_id': '55739505c88772ca7fd69c1aed8e2cb9'}}
+2026-02-18 00:42:11,215|DEBUG|Redeem check fail: {'code': -32090, 'message': 'Too many requests, reason: call rate limit exhausted, retry in 10s', 'data': {'trace_id': '4cd1658e1eea271d938c0cd66f5c7cdd'}}
+2026-02-18 02:09:10,567|DEBUG|Redeem check fail: {'code': -32090, 'message': 'Too many requests, reason: call rate limit exhausted, retry in 10s', 'data': {'trace_id': '5cdb3c28b3547c101e18e74298481b11'}}
+2026-02-18 02:59:01,061|DEBUG|Redeem check fail: {'code': -32090, 'message': 'Too many requests, reason: call rate limit exhausted, retry in 10s', 'data': {'trace_id': '788aa8ad6171f5d927bba74ce3f0f829'}}
+2026-02-18 03:15:35,927|DEBUG|Redeem check fail: ('execution reverted: Too many requests, reason: call rate limit exhausted, retry in 10s', {'trace_id': '046268b0a11120ae66a746826b81786f'})
+2026-02-18 03:32:06,538|DEBUG|Redeem check fail: {'code': -32090, 'message': 'Too many requests, reason: call rate limit exhausted, retry in 10s', 'data': {'trace_id': 'c4c131a6523be68cdf2596fe64979609'}}
+2026-02-18 03:52:24,777|INFO|Loaded 43 historical trades for adaptive sizing
+2026-02-18 03:52:24,778|INFO|Cortex loaded: ARB=1.00, LATENCY=1.00, MEANREV=1.00, FLASH=1.99, SQUEEZE=1.00
+2026-02-18 03:52:24,779|INFO|Loaded 45 condition IDs for redemption
+2026-02-18 03:52:25,503|INFO|Auth OK type=1 funder=0xF9b8c919b97CbD5eb1d71b23B9915Df711860694
+2026-02-18 03:52:25,548|INFO|Updated STARTING_BALANCE to $8505.81
+2026-02-18 03:56:04,799|INFO|MARKET ORDER: $178.62 NO id=0xd3e1c800d0849a167211eb5137cbb1256dd8f79ef7b6fb369eaebb8f553cd0da st=matched shares=753.4136
+2026-02-18 03:56:05,000|INFO|MARKET ORDER: $416.78 NO id=0x71f8cc641ce922a002bc2a1193e34fac5cf6dbd5b639fce39d287f4886d3ac8c st=matched shares=0.00158693
+2026-02-18 04:04:58,121|DEBUG|Redeem check fail: {'code': -32090, 'message': 'Too many requests, reason: call rate limit exhausted, retry in 10s', 'data': {'trace_id': 'ab0a184372cf1644de15f726be8636e9'}}
+2026-02-18 04:05:00,435|INFO|BTC fallback btc-updown-15m-1771386300: open=$67666.00 close=$67507.98 DOWN side=NO → WON
+2026-02-18 04:05:00,499|INFO|BTC fallback btc-updown-15m-1771386300: open=$67666.00 close=$67507.98 DOWN side=NO → WON
+2026-02-18 04:05:00,499|WARNING|Resolution sanity fail: won=True but pnl=-416.78, cost=416.78, shares=0.00. Forcing loss.
+2026-02-18 04:05:41,327|DEBUG|Redeem check fail: {'code': -32090, 'message': 'Too many requests, reason: call rate limit exhausted, retry in 10s', 'data': {'trace_id': 'b640e89a363eeccf45501fb1c8adc40b'}}
+2026-02-18 04:13:28,830|DEBUG|Redeem check fail: {'code': -32090, 'message': 'Too many requests, reason: call rate limit exhausted, retry in 10s', 'data': {'trace_id': 'fe4f843772949b597fdb7914e46802a8'}}
+2026-02-18 04:24:11,570|INFO|MARKET ORDER: $306.90 NO id=0x8678e956740fb974e8fc348273fdf8b964f88f13badfbf530248b947d1c50edb st=matched shares=0.0015508575
+2026-02-18 04:24:11,847|INFO|MARKET ORDER: $570.02 NO id=0x005371ee46bc4d3a189381251c6f1c0a59ffe5c1e2459fef8d094bc903c506a7 st=matched shares=0.002774858694
+2026-02-18 04:35:02,410|INFO|BTC fallback btc-updown-15m-1771388100: open=$67562.22 close=$67735.99 UP side=NO → LOST
+2026-02-18 04:35:02,473|INFO|BTC fallback btc-updown-15m-1771388100: open=$67562.22 close=$67735.99 UP side=NO → LOST
+2026-02-18 04:38:58,617|DEBUG|Cleanup: removed 2 old positions, 0 stale confirms
+2026-02-18 05:01:56,880|DEBUG|Cleanup: removed 2 old positions, 0 stale confirms
+2026-02-18 05:03:31,271|DEBUG|Redeem check fail: {'code': -32090, 'message': 'Too many requests, reason: call rate limit exhausted, retry in 10s', 'data': {'trace_id': '3e345ac88bba2f78219d397430df27b3'}}
+2026-02-18 05:06:44,855|INFO|MARKET ORDER: $42.35 YES id=0x0831d5d636e239bc369f76f3458595adf34d8666c9345b7a2b0305122e381909 st=matched shares=189.308624
+2026-02-18 05:15:57,579|DEBUG|Redeem check fail: ('execution reverted: Too many requests, reason: call rate limit exhausted, retry in 10s', {'trace_id': '45c9e9ae7ce58f2a4e76ee18c4182aaf'})
+2026-02-18 05:20:15,637|INFO|BTC fallback btc-updown-15m-1771390800: open=$67825.99 close=$67926.00 UP side=YES → WON
+2026-02-18 05:32:47,425|DEBUG|Redeem check fail: {'code': -32090, 'message': 'Too many requests, reason: call rate limit exhausted, retry in 10s', 'data': {'trace_id': '0af91046054861a51efca17215367405'}}
+2026-02-18 05:36:57,826|DEBUG|Redeem check fail: ('execution reverted: Too many requests, reason: call rate limit exhausted, retry in 10s', {'trace_id': '09dd0cc5b0892631cf03e8f946b4c72d'})
+2026-02-18 05:48:20,561|DEBUG|Cleanup: removed 1 old positions, 0 stale confirms
+2026-02-18 06:05:56,295|DEBUG|Redeem check fail: ('execution reverted: Too many requests, reason: call rate limit exhausted, retry in 10s', {'trace_id': 'f57099466d58ee353fd55bb59d1dcdb6'})
+2026-02-18 06:23:20,529|INFO|MARKET ORDER: $185.37 YES id=0x30672da9f7496fa0eebfea46b23e3c42cac98aa9f1f3b1b209f4c4a548ce2eb6 st=matched shares=886.200868
+2026-02-18 06:26:46,589|DEBUG|Redeem check fail: {'code': -32090, 'message': 'Too many requests, reason: call rate limit exhausted, retry in 10s', 'data': {'trace_id': '343cfc9323d9e0b0b8fba4dfcd80233b'}}
+2026-02-18 06:26:51,857|DEBUG|Redeem check fail: {'code': -32090, 'message': 'Too many requests, reason: call rate limit exhausted, retry in 10s', 'data': {'trace_id': '200719dd45a4ca2c6c4b9205437fbd2c'}}
+2026-02-18 06:35:17,483|INFO|BTC fallback btc-updown-15m-1771395300: open=$67801.66 close=$67830.02 UP side=YES → WON
+2026-02-18 06:58:03,533|DEBUG|Cleanup: removed 1 old positions, 0 stale confirms
+2026-02-18 07:54:30,850|DEBUG|Redeem check fail: {'code': -32090, 'message': 'Too many requests, reason: call rate limit exhausted, retry in 10s', 'data': {'trace_id': 'a3032d34b9178d3fafdcaba515235e27'}}
+2026-02-18 08:23:14,630|INFO|MARKET ORDER: $376.26 NO id=0xbf608959b9467811ee5624f18052228d0e4656466e9a217240541d8b334c83ac st=matched shares=0.001980315788
+2026-02-18 08:34:59,738|INFO|Gamma resolved btc-updown-15m-1771402500: YES won → LOST (side=NO)
+2026-02-18 08:53:51,781|DEBUG|Cleanup: removed 1 old positions, 0 stale confirms
+2026-02-18 08:57:12,227|DEBUG|Redeem check fail: ('execution reverted: Too many requests, reason: call rate limit exhausted, retry in 10s', {'trace_id': 'cdea9bc6e75893fa5ecc7aa19028f95f'})
+2026-02-18 09:05:30,995|DEBUG|Redeem check fail: {'code': -32090, 'message': 'Too many requests, reason: call rate limit exhausted, retry in 10s', 'data': {'trace_id': 'ba313148f22065385a14d74560135bea'}}
+2026-02-18 09:09:41,320|DEBUG|Redeem check fail: {'code': -32090, 'message': 'Too many requests, reason: call rate limit exhausted, retry in 10s', 'data': {'trace_id': '4978aefa145c421135cc5cabc08c9dfc'}}
+2026-02-18 09:13:52,326|DEBUG|Redeem check fail: ('execution reverted: Too many requests, reason: call rate limit exhausted, retry in 10s', {'trace_id': '5ae34d41741188a2ed6f255c7145dd72'})
+2026-02-18 09:47:16,966|DEBUG|Redeem check fail: {'code': -32090, 'message': 'Too many requests, reason: call rate limit exhausted, retry in 10s', 'data': {'trace_id': '29040798df0b7d3d84f0f34b9e318b99'}}
+2026-02-18 09:47:22,076|DEBUG|Redeem check fail: ('execution reverted: Too many requests, reason: call rate limit exhausted, retry in 10s', {'trace_id': '62b8cb776abb614934efae8fc20df3eb'})
+2026-02-18 09:55:02,130|ERROR|Market order fail: PolyApiException[status_code=400, error_message={'error': "order couldn't be fully filled. FOK orders are fully filled or killed."}]
+2026-02-18 09:55:02,191|INFO|LIMIT ORDER: $303.74 YES (3037.38sh @ $0.1) id=0x019d8ca3b0570c72dfb384267ee6b61f80ea68c4eff0f60272720609ef39f1fe st=live
+2026-02-18 09:55:02,542|INFO|MARKET ORDER: $250.33 YES id=0xfcd88274e04bc0c8493fc406f0842ba60fd39f140d53f94fa3e1c933edf7d83f st=matched shares=0.001573044284
+2026-02-18 10:05:02,903|INFO|BTC fallback btc-updown-15m-1771407900: open=$68276.00 close=$68096.02 DOWN side=YES → LOST
+2026-02-18 10:05:02,972|INFO|BTC fallback btc-updown-15m-1771407900: open=$68276.00 close=$68096.02 DOWN side=YES → LOST
+2026-02-18 10:27:10,708|DEBUG|Cleanup: removed 2 old positions, 0 stale confirms
+2026-02-18 10:53:43,946|INFO|MARKET ORDER: $41.94 NO id=0x8847bd17789209ff83e26b3dc2317dac72ded693cf03fe22e0b0cc85325e5610 st=matched shares=223.421161
+2026-02-18 11:05:00,809|INFO|BTC fallback btc-updown-15m-1771411500: open=$67784.14 close=$67782.00 DOWN side=NO → WON
+2026-02-18 11:37:44,078|DEBUG|Cleanup: removed 1 old positions, 0 stale confirms
+2026-02-18 12:05:24,098|INFO|MARKET ORDER: $158.14 NO id=0xb2b0681de715c3a206143495c09c67a995499a4e489b4d460566acf41f5d093f st=matched shares=744.705908
+2026-02-18 12:17:22,370|INFO|Loaded 53 historical trades for adaptive sizing
+2026-02-18 12:17:22,370|INFO|Cortex loaded: ARB=1.00, LATENCY=1.00, MEANREV=1.21, FLASH=0.96, SQUEEZE=1.00
+2026-02-18 12:17:22,371|INFO|Loaded 51 condition IDs for redemption
+2026-02-18 12:17:23,629|INFO|Auth OK type=1 funder=0xF9b8c919b97CbD5eb1d71b23B9915Df711860694
+2026-02-18 12:17:23,682|INFO|Updated STARTING_BALANCE to $9062.98
+2026-02-18 12:18:31,321|INFO|Loaded 53 historical trades for adaptive sizing
+2026-02-18 12:18:31,322|INFO|Cortex loaded: ARB=1.00, LATENCY=1.00, MEANREV=1.21, FLASH=0.96, SQUEEZE=1.00
+2026-02-18 12:18:31,323|INFO|Loaded 51 condition IDs for redemption
+2026-02-18 12:18:32,114|INFO|Auth OK type=1 funder=0xF9b8c919b97CbD5eb1d71b23B9915Df711860694
+2026-02-18 12:18:32,163|INFO|Updated STARTING_BALANCE to $9062.98
+2026-02-18 12:18:51,241|INFO|Gamma resolved btc-updown-15m-1771416000: YES won → LOST (side=NO)
+2026-02-18 06:52:48,170|INFO|Loaded 54 historical trades for adaptive sizing
+2026-02-18 06:52:48,171|INFO|Cortex loaded: ARB=1.00, LATENCY=1.00, MEANREV=1.21, FLASH=0.97, SQUEEZE=1.00
+2026-02-18 06:52:48,174|INFO|Loaded 51 condition IDs for redemption
+2026-02-18 06:52:55,468|INFO|Auth OK type=1 funder=0xF9b8c919b97CbD5eb1d71b23B9915Df711860694
+2026-02-18 06:52:55,797|INFO|Updated STARTING_BALANCE to $9062.98
+2026-02-18 07:04:54,988|INFO|Loaded 54 historical trades for adaptive sizing
+2026-02-18 07:04:54,988|INFO|Cortex loaded: ARB=1.00, LATENCY=1.00, MEANREV=1.21, FLASH=0.97, SQUEEZE=1.00
+2026-02-18 07:04:54,998|INFO|Loaded 51 condition IDs for redemption
+2026-02-18 07:04:58,271|INFO|Auth OK type=1 funder=0xF9b8c919b97CbD5eb1d71b23B9915Df711860694
+2026-02-18 07:04:58,604|INFO|Updated STARTING_BALANCE to $9062.98

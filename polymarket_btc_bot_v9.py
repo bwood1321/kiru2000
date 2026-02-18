@@ -1,5 +1,5 @@
 """
-POLYMARKET BTC BOT v9 — THE CORTEX
+POLYMARKET BTC BOT v9.1 — THE CORTEX
 One brain. Sees everything. Hunts profit.
 
 The Cortex is a unified intelligence that replaces the v8 StrategyManager.
@@ -119,7 +119,7 @@ class Config:
             arb_pct=float(os.getenv("ARB_PCT", "0.05")),
             latency_pct=float(os.getenv("LATENCY_PCT", "0.06")),
             momentum_pct=float(os.getenv("MOMENTUM_PCT", "0.05")),
-            flash_pct=float(os.getenv("FLASH_PCT", "0.04")),
+            flash_pct=float(os.getenv("FLASH_PCT", "0.03")),
             arb_size=float(os.getenv("ARB_SIZE", "2.0")),
             latency_size=float(os.getenv("LATENCY_SIZE", "2.5")),
             momentum_size=float(os.getenv("MOMENTUM_SIZE", "2.0")),
@@ -1411,7 +1411,7 @@ class Cortex:
     def get_max_entry(s, strat):
         """Tighter entry requirements for low-trust strategies."""
         trust = s._trust.get(strat, 1.0)
-        defaults = {"ARB": 0.38, "LATENCY": 0.40, "MEANREV": 0.22, "FLASH": 0.22, "SQUEEZE": 0.20}
+        defaults = {"ARB": 0.38, "LATENCY": 0.30, "MEANREV": 0.22, "FLASH": 0.22, "SQUEEZE": 0.20}
         base = defaults.get(strat, 0.25)
         if trust < 0.5:
             return base * 0.75  # tighten by 25% for untrusted
@@ -2363,11 +2363,13 @@ class Risk:
         if len([p for p in s.positions if p.status == "OPEN"]) >= s.c.max_positions: return False
         return s.available >= 1.0
     def open(s, t, market_end=None, actual_shares=None):
-        shares = actual_shares if actual_shares else t.size / t.price
+        shares = actual_shares if actual_shares else (t.size / t.price if t.price > 0 else 0)
+        # Use actual fill price if we have actual shares data
+        actual_entry = (t.size / shares) if (actual_shares and shares > 0) else t.price
         # If actual_shares is 0, this is an unfilled limit order
         # Still track it so we can cancel/clean it up, but mark it
         p = Pos(id=t.oid, strat=t.strat, slug=t.slug, side=t.side,
-            entry=t.price, shares=shares, cost=t.size if shares > 0 else 0,
+            entry=round(actual_entry, 4), shares=shares, cost=t.size if shares > 0 else 0,
             opened=t.ts, market_end=market_end)
         s.positions.append(p); s.trades.append(t)
         if shares > 0: s.total_bet += t.size  # only count filled orders
@@ -2510,7 +2512,7 @@ class Risk:
         l = s._lifetime_losses + sum(1 for t in s.trades if t.pnl < 0)
         return w, l, (w / (w + l) * 100 if w + l else 0)
 
-# ─── DASHBOARD v9 — Cortex-Aware ───
+# ─── DASHBOARD v9.1 — Cortex-Aware ───
 class Dash:
     def __init__(s): s.evts = deque(maxlen=10)
     def ev(s, e): s.evts.append(f"{datetime.now().strftime('%H:%M:%S')} {e}")
@@ -2538,7 +2540,7 @@ class Dash:
             else: cx_mode = f"{WARN}▽ CAREFUL{R}"
 
         print(f"\n  {H1}╔{'═'*62}╗{R}")
-        print(f"  {H1}║{R}  {H2}⬡ POLYMARKET BTC BOT v9{R} {DIM}— THE CORTEX{R}        {DIM}{now}  ⏱{rt}{R}  {H1}║{R}")
+        print(f"  {H1}║{R}  {H2}⬡ POLYMARKET BTC BOT v9.1{R} {DIM}— THE CORTEX{R}        {DIM}{now}  ⏱{rt}{R}  {H1}║{R}")
         print(f"  {H1}║{R}  {DIM}Mode:{R} {mode}  {DIM}│{R}  {DIM}Cortex:{R} {cx_mode}  {DIM}│{R}  ", end="")
 
         # Connection dots
@@ -2637,6 +2639,17 @@ class Dash:
             # v9.1: Recovery indicator
             if sm < 1.0 and cortex._consec_wins >= 2:
                 print(f"  {H2}│{R}  {OK}↑ RECOVERING{R} ({cortex._consec_wins}W streak)                              {H2}│{R}")
+
+            # v9.1: Data collection summary
+            cortex_total = sum(len(v) for v in cortex._trades.values())
+            regime_combos = len(cortex._regime_perf)
+            dz_count = len([z for z, d in cortex._loss_zones.items() if d['losses'] >= 3])
+            data_parts = [f"{cortex_total}t"]
+            if regime_combos > 0: data_parts.append(f"{regime_combos}rgm")
+            if dz_count > 0: data_parts.append(f"{dz_count}dz")
+            if lc_n > 0: data_parts.append(f"{lc_n}lc")
+            data_str = " ".join(data_parts)
+            print(f"  {H2}│{R}  {LBL}Data{R}   {DIM}{data_str}{R}                                          {H2}│{R}")
 
             # Pattern discoveries
             if cortex._patterns:
@@ -2753,10 +2766,10 @@ class Dash:
         # Add closed positions NOT already in past_trades (avoids duplicates)
         past_slugs_costs = set()
         for t in all_ended:
-            past_slugs_costs.add((t.get("slug",""), t.get("cost",0), t.get("side","")))
+            past_slugs_costs.add((t.get("slug",""), round(t.get("cost",0),2), t.get("side",""), round(t.get("entry",0),4)))
         closed = [p for p in risk.positions if p.status != "OPEN"]
         for p in closed:
-            key = (p.slug, p.cost, p.side)
+            key = (p.slug, round(p.cost,2), p.side, round(p.entry,4))
             if key in past_slugs_costs: continue  # already in past_trades
             local_ts = "?"
             if p.opened:
@@ -2889,7 +2902,7 @@ class Bot:
         s._past_trades = s._load_history()
         with open(s.HISTORY_FILE, "a") as f:
             f.write(f"\n{'='*60}\n")
-            f.write(f"  BOT v9 STARTED: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            f.write(f"  BOT v9.1 STARTED: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
             f.write(f"  Balance: ${s.risk.show_bal:.2f}\n")
             f.write(f"  Mode: {'LIVE' if not s.c.dry_run else 'DRY RUN'}\n")
             f.write(f"{'='*60}\n")
@@ -2964,7 +2977,7 @@ class Bot:
             w, l, wr = s.risk.stats()
             with open(s.HISTORY_FILE, "a") as f:
                 f.write(f"{'─'*60}\n")
-                f.write(f"  BOT v9 STOPPED: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+                f.write(f"  BOT v9.1 STOPPED: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
                 elapsed = int(time.time() - s.start_time)
                 hrs, rem = divmod(elapsed, 3600)
                 mins, secs = divmod(rem, 60)
@@ -3020,7 +3033,7 @@ class Bot:
 
     def run(s):
         os.system("cls" if os.name == "nt" else "clear")
-        print(f"\n  {H1}{'='*55}\n  |  POLYMARKET BTC BOT v9 — INTELLIGENT ENGINE\n  {'='*55}{R}\n")
+        print(f"\n  {H1}{'='*55}\n  |  POLYMARKET BTC BOT v9.1 — INTELLIGENT ENGINE\n  {'='*55}{R}\n")
         print(f"  {H2}[1/4]{R} Gamma..."); s.conn.gamma = "OK" if s.finder.test() else "FAILED"
         print(f"        {'OK' if s.conn.gamma == 'OK' else 'FAILED'}")
         print(f"  {H2}[2/4]{R} CLOB..."); s.conn.clob = "OK" if s.ex.test_public() else "FAILED"
@@ -3070,17 +3083,33 @@ class Bot:
         print(f"    Mean Reversion: {OK}Active{R} (replaces Momentum — buys the bounce)")
         print(f"    Smart Flash: {OK}Active{R} (book filter + volatility gate)")
         print(f"    Market Loss Limit: {OK}Active{R} (stop after 2 losses per market)")
-        print(f"    {H2}v9 THE CORTEX:{R}")
+        print(f"    {H2}v9.1 THE CORTEX:{R}")
         print(f"    Unified Brain: {OK}Active{R} (replaces Manager — EV-based trust, not win rate)")
         print(f"    Macro Bias: {OK}Active{R} (cross-market momentum from last 12 outcomes)")
         print(f"    Danger Zones: {OK}Active{R} (avoids BTC price levels with loss history)")
         print(f"    Session P&L: {OK}Active{R} (adapts aggression based on session performance)")
         print(f"    Regime Matching: {OK}Active{R} (learns which strat+regime combos work)")
         print(f"    Pattern Discovery: {OK}Active{R} (scans for correlations every 10 trades)")
+        print(f"    {H2}v9.1 FIXES:{R}")
+        print(f"    5-Min Hard Block: {OK}Active{R} (blocks counter-trend when 5m trend is clear)")
+        print(f"    Directional Bias: {OK}Active{R} (reduces side that keeps losing in session)")
+        print(f"    Recovery Detection: {OK}Active{R} (snaps back sizing after 2 consecutive wins)")
+        print(f"    Lifecycle Model: {OK}Active{R} (learns price patterns at min 2/4/6/8/10/12)")
+        # v9.1: Show actual data loaded
+        cortex_trades = sum(len(v) for v in s.cortex._trades.values())
+        regime_combos = len(s.cortex._regime_perf)
+        danger_zones = len([z for z, d in s.cortex._loss_zones.items() if d['losses'] >= 3])
+        lc_markets = len(s.cortex._lifecycle_data)
+        print(f"\n  {H2}Intelligence Data:{R}")
+        print(f"    Trade history: {OK}{len(s.sizer.history)}{R} trades → Cortex: {OK}{cortex_trades}{R} scored")
+        print(f"    Regime map: {OK}{regime_combos}{R} strat×regime combos learned")
+        print(f"    Danger zones: {OK}{danger_zones}{R} BTC price zones flagged")
+        print(f"    Lifecycle model: {OK}{lc_markets}{R} markets profiled{' (empty — collecting)' if lc_markets == 0 else ''}")
+        print(f"    Trust: " + "  ".join(f"{st[:3]}={s.cortex._trust[st]:.2f}x" for st in s.cortex.STRATS))
         print(f"\n  {H1}{'='*55}{R}")
-        print(f"  {'LIVE TRADING v9' if not s.c.dry_run else 'DRY RUN v9'}")
+        print(f"  {'LIVE TRADING v9.1' if not s.c.dry_run else 'DRY RUN v9.1'}")
         print(f"  {H1}{'='*55}{R}")
-        time.sleep(3); s._init_history(); s._sync_existing_positions(); s.dash.ev("Bot v9 started"); s._loop()
+        time.sleep(3); s._init_history(); s._sync_existing_positions(); s.dash.ev("Bot v9.1 started"); s._loop()
 
     def _loop(s):
         ctr = 0; s._orders = []; s._poly_pos = []
@@ -3205,7 +3234,7 @@ class Bot:
                     cortex=s.cortex)
                 time.sleep(s.c.poll_sec)
             except KeyboardInterrupt:
-                s.ex.cancel_all(); s._auto_redeem(); s._close_history(); s._summary(); break
+                s.ex.cancel_all(); s._auto_redeem(); s._close_history(); s.cortex._save_lifecycle(); s._summary(); break
             except Exception as e:
                 log.error(f"Loop: {e}\n{traceback.format_exc()}")
                 s.dash.ev(f"Err: {str(e)[:40]}"); time.sleep(3)
@@ -3325,9 +3354,9 @@ class Bot:
             if p.strat not in strat_best_entry or p.entry < strat_best_entry[p.strat]:
                 strat_best_entry[p.strat] = p.entry
 
-        # Total risk on this market (for 25% balance cap)
+        # Total risk on this market (15% balance cap per market)
         market_risk = sum(p.cost for p in open_here)
-        max_market_risk = s.risk.show_bal * 0.25
+        max_market_risk = s.risk.show_bal * 0.15  # v9.1: was 0.25, reduced — $876 loss on single market overnight
         if market_risk >= max_market_risk: return
 
         # Same-strategy stacking requires: 5+ min left, TRENDING/BREAKOUT regime
@@ -3423,15 +3452,6 @@ class Bot:
                     return False, "fast trend: NO while BTC rising", 0
                 if fast_trend_down and side == "YES":
                     return False, "fast trend: YES while BTC falling", 0
-
-                # v8: FAST TREND SAFETY — catches moves before regime engine classifies them
-                # If BTC moved 0.15%+ in 2 min in one direction, don't buy the opposite side
-                # even if regime still says FLAT. Regime lags; this doesn't.
-                btc_2m = s.feed.chg(120)
-                if btc_2m > 0.0015 and side == "NO":
-                    return False, "fast trend: BTC up 0.15%+ → no NO", 0
-                if btc_2m < -0.0015 and side == "YES":
-                    return False, "fast trend: BTC down 0.15%+ → no YES", 0
 
             # Side lock: must match existing direction
             if locked_side and side != locked_side:
@@ -3657,7 +3677,7 @@ class Bot:
         os.system("cls" if os.name == "nt" else "clear")
         w, l, wr = s.risk.stats()
         print(f"\n{H1}{'═'*62}")
-        print(f"  {LBL}SESSION SUMMARY — BOT v9 — THE CORTEX{R}")
+        print(f"  {LBL}SESSION SUMMARY — BOT v9.1 — THE CORTEX{R}")
         print(f"{H1}{'═'*62}{R}")
         print(f"  {LBL}Balance:{R}  {bal_c(s.risk.show_bal)} USDC")
         print(f"  {LBL}Real P&L:{R} {pnl_c2(s.risk.tpnl)}")
