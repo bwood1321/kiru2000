@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bot v8.1 — Intelligence Systems</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'DM Sans', sans-serif; background: #08090d; color: #c8cdd6; line-height: 1.65; }
+  
+  .container { max-width: 860px; margin: 0 auto; padding: 40px 24px 80px; }
+  
+  h1 { font-family: 'JetBrains Mono', monospace; font-size: 26px; font-weight: 700; text-align: center; margin-bottom: 4px; }
+  h1 .accent { color: #60a5fa; }
+  .subtitle { text-align: center; color: #4b5563; font-size: 13px; font-family: 'JetBrains Mono', monospace; margin-bottom: 48px; }
+  
+  /* Hierarchy visual */
+  .hierarchy { position: relative; margin-bottom: 56px; padding: 28px; background: linear-gradient(135deg, #0f1219 0%, #111827 100%); border-radius: 16px; border: 1px solid #1f2937; }
+  .hierarchy-title { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #4b5563; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 20px; }
+  .hierarchy-flow { display: flex; flex-direction: column; gap: 8px; align-items: center; }
+  .h-box { padding: 10px 24px; border-radius: 8px; font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 600; text-align: center; width: 100%; max-width: 400px; }
+  .h-manager { background: linear-gradient(135deg, #7c3aed22, #3b82f622); border: 1px solid #7c3aed55; color: #a78bfa; }
+  .h-risk { background: #dc262622; border: 1px solid #dc262644; color: #f87171; }
+  .h-intel { background: #f59e0b18; border: 1px solid #f59e0b33; color: #fbbf24; }
+  .h-strat { background: #10b98118; border: 1px solid #10b98133; color: #34d399; }
+  .h-arrow { color: #374151; font-size: 18px; }
+  
+  /* Card system */
+  .card { position: relative; margin-bottom: 28px; padding: 28px; background: #0f1219; border-radius: 14px; border: 1px solid #1e2636; overflow: hidden; }
+  .card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; }
+  .card-manager::before { background: linear-gradient(90deg, #7c3aed, #3b82f6); }
+  .card-trend::before { background: linear-gradient(90deg, #f59e0b, #ef4444); }
+  .card-adaptive::before { background: linear-gradient(90deg, #10b981, #06b6d4); }
+  .card-conviction::before { background: linear-gradient(90deg, #ec4899, #f43f5e); }
+  .card-momentum::before { background: linear-gradient(90deg, #ef4444, #dc2626); }
+  .card-streak::before { background: linear-gradient(90deg, #22c55e, #16a34a); }
+  .card-token::before { background: linear-gradient(90deg, #06b6d4, #0ea5e9); }
+  .card-book::before { background: linear-gradient(90deg, #8b5cf6, #a78bfa); }
+  
+  .card-header { display: flex; align-items: center; gap: 14px; margin-bottom: 16px; }
+  .card-icon { width: 42px; height: 42px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0; }
+  .card-name { font-family: 'JetBrains Mono', monospace; font-size: 16px; font-weight: 700; }
+  .card-tag { font-family: 'JetBrains Mono', monospace; font-size: 10px; padding: 3px 8px; border-radius: 4px; margin-left: auto; }
+  
+  .card-body { font-size: 14.5px; color: #9ca3af; margin-bottom: 16px; }
+  .card-body strong { color: #e5e7eb; }
+  
+  .example-box { background: #0a0d14; border: 1px solid #1a2030; border-radius: 8px; padding: 14px 16px; font-family: 'JetBrains Mono', monospace; font-size: 12px; line-height: 1.8; }
+  .example-box .label { color: #4b5563; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+  .ex-green { color: #34d399; }
+  .ex-red { color: #f87171; }
+  .ex-yellow { color: #fbbf24; }
+  .ex-blue { color: #60a5fa; }
+  .ex-purple { color: #a78bfa; }
+  .ex-dim { color: #4b5563; }
+  
+  .icon-manager { background: #7c3aed22; color: #a78bfa; }
+  .icon-trend { background: #f59e0b18; color: #fbbf24; }
+  .icon-adaptive { background: #10b98118; color: #34d399; }
+  .icon-conviction { background: #ec489918; color: #f472b6; }
+  .icon-momentum { background: #ef444418; color: #f87171; }
+  .icon-streak { background: #22c55e18; color: #22c55e; }
+  .icon-token { background: #06b6d418; color: #22d3ee; }
+  .icon-book { background: #8b5cf618; color: #a78bfa; }
+  
+  .tag-new { background: #7c3aed22; color: #a78bfa; border: 1px solid #7c3aed44; }
+  .tag-v6 { background: #f59e0b15; color: #fbbf24; border: 1px solid #f59e0b33; }
+  .tag-v7 { background: #10b98115; color: #34d399; border: 1px solid #10b98133; }
+  .tag-v8 { background: #3b82f615; color: #60a5fa; border: 1px solid #3b82f633; }
+  
+  .section-label { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #374151; text-transform: uppercase; letter-spacing: 2px; margin: 40px 0 16px; padding-left: 4px; }
+
+  .sizing-demo { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 16px; }
+  .sizing-item { background: #0a0d14; border: 1px solid #1a2030; border-radius: 8px; padding: 12px; }
+  .sizing-strat { font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 600; margin-bottom: 4px; }
+  .sizing-bar { height: 6px; border-radius: 3px; margin: 6px 0; }
+  .sizing-detail { font-size: 11px; color: #6b7280; font-family: 'JetBrains Mono', monospace; }
+  
+  @media (max-width: 600px) {
+    .sizing-demo { grid-template-columns: 1fr; }
+    .card { padding: 20px; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+<h1>Bot v8.1 — <span class="accent">Intelligence Systems</span></h1>
+<p class="subtitle">7 systems that decide what to trade and how much to bet</p>
+
+<!-- Hierarchy -->
+<div class="hierarchy">
+  <div class="hierarchy-title">Decision Hierarchy</div>
+  <div class="hierarchy-flow">
+    <div class="h-box h-manager">🧠 THE MANAGER — trusts or starves each strategy</div>
+    <div class="h-arrow">↓</div>
+    <div class="h-box h-risk">🛡️ 16 RISK LAYERS — blocks bad trades</div>
+    <div class="h-arrow">↓</div>
+    <div class="h-box h-intel">⚡ 6 INTEL SYSTEMS — shape sizing & timing</div>
+    <div class="h-arrow">↓</div>
+    <div class="h-box h-strat">📊 5 STRATEGIES — generate trade signals</div>
+  </div>
+</div>
+
+<!-- ═══ THE MANAGER ═══ -->
+<div class="section-label">👑 Top-Level Intelligence</div>
+
+<div class="card card-manager">
+  <div class="card-header">
+    <div class="card-icon icon-manager">🧠</div>
+    <div class="card-name">The Manager</div>
+    <div class="card-tag tag-new">v8.1 NEW</div>
+  </div>
+  <div class="card-body">
+    The only system that <strong>learns from results and changes behavior</strong>. Everything else follows rules — The Manager watches who's making money and who's losing it, then shifts capital accordingly. Like a boss deciding who gets the budget.
+    <br><br>
+    It tracks a rolling window of the last 20 trades per strategy and calculates a <strong>trust score</strong> (0.25x to 2.0x) that directly multiplies bet size. Hot strategy winning 55%+? Gets up to 2x capital. Cold strategy below 35% win rate? Cut to 0.25x — barely alive but can earn its way back.
+    <br><br>
+    Also detects <strong>momentum</strong>: 3 wins in a row gets a 1.2x bonus. 3 losses in a row gets a 0.6x penalty. Loads history from trade_data.json so it remembers across restarts.
+  </div>
+  <div class="example-box">
+    <div class="label">Live Example @ $1,470 balance</div>
+    <span class="ex-green">LATENCY: trust 1.5x → $88 × 1.5 = $132 🔥</span><br>
+    <span class="ex-yellow">SQUEEZE: trust 1.3x → $44 × 1.3 = $44 (3% cap)</span><br>
+    <span class="ex-red">FLASH: trust 0.5x → $44 × 0.5 = $22 ⚠️</span><br>
+    <span class="ex-red">MEANREV: trust 0.25x → $44 × 0.25 = $11 ❄️</span>
+  </div>
+  <div class="sizing-demo">
+    <div class="sizing-item">
+      <div class="sizing-strat" style="color:#34d399">LATENCY</div>
+      <div class="sizing-bar" style="width:90%; background: linear-gradient(90deg, #34d399, #22c55e);"></div>
+      <div class="sizing-detail">4W/4L +$484 ROI 92% → 🔥 TRUSTED</div>
+    </div>
+    <div class="sizing-item">
+      <div class="sizing-strat" style="color:#fbbf24">SQUEEZE</div>
+      <div class="sizing-bar" style="width:65%; background: linear-gradient(90deg, #fbbf24, #f59e0b);"></div>
+      <div class="sizing-detail">4W/4L +$443 ROI 135% → WARM</div>
+    </div>
+    <div class="sizing-item">
+      <div class="sizing-strat" style="color:#f87171">FLASH</div>
+      <div class="sizing-bar" style="width:25%; background: linear-gradient(90deg, #f87171, #ef4444);"></div>
+      <div class="sizing-detail">6W/13L +$5 ROI 1% → ⚠️ COOLING</div>
+    </div>
+    <div class="sizing-item">
+      <div class="sizing-strat" style="color:#6b7280">MEANREV</div>
+      <div class="sizing-bar" style="width:12%; background: linear-gradient(90deg, #6b7280, #4b5563);"></div>
+      <div class="sizing-detail">0W/3L -$116 → ❄️ MINIMUM</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ INTEL SYSTEMS ═══ -->
+<div class="section-label">⚡ Intelligence Systems</div>
+
+<div class="card card-trend">
+  <div class="card-header">
+    <div class="card-icon icon-trend">📈</div>
+    <div class="card-name">Trend Engine</div>
+    <div class="card-tag tag-v6">v6</div>
+  </div>
+  <div class="card-body">
+    Classifies the current BTC market into one of <strong>5 regimes</strong>: FLAT, TRENDING_UP, TRENDING_DOWN, CHOPPY, or BREAKOUT. Uses EMA crossovers, RSI, and volatility bands calculated from the live Binance price feed.
+    <br><br>
+    Every strategy checks the regime before entering. The hard counter-trend block uses it to prevent buying NO in TRENDING_UP (0% win rate historically). Also provides a <strong>trend multiplier</strong> that boosts with-trend bets and reduces counter-trend ones.
+  </div>
+  <div class="example-box">
+    <div class="label">How it decides</div>
+    <span class="ex-dim">BTC: $68,500 → $68,800 over 3 min</span><br>
+    <span class="ex-green">Regime: TRENDING_UP</span><br>
+    <span class="ex-green">→ YES trades get 1.2x boost</span><br>
+    <span class="ex-red">→ NO trades HARD BLOCKED</span>
+  </div>
+</div>
+
+<div class="card card-adaptive">
+  <div class="card-header">
+    <div class="card-icon icon-adaptive">⚖️</div>
+    <div class="card-name">Adaptive Sizer</div>
+    <div class="card-tag tag-v6">v6</div>
+  </div>
+  <div class="card-body">
+    Tracks per-strategy performance over longer timeframes and adjusts multipliers between <strong>0.3x and 2.5x</strong>. If a strategy loses 5 in a row, it gets paused for 30 minutes. Also tracks which side (YES/NO) is performing better and can cool a side that's bleeding.
+    <br><br>
+    Works on a slower timescale than The Manager — thinks in terms of sessions and hours, not individual trades. The Manager handles fast reactions, Adaptive Sizer handles long-term learning.
+  </div>
+  <div class="example-box">
+    <div class="label">Difference from The Manager</div>
+    <span class="ex-purple">Manager: "Flash lost 3 in a row → cut to 0.25x NOW"</span><br>
+    <span class="ex-yellow">Sizer: "Flash has 35% WR over 20 trades → mult 0.7x"</span><br>
+    <span class="ex-dim">Both multiply sizing. Manager is fast. Sizer is slow.</span>
+  </div>
+</div>
+
+<div class="card card-conviction">
+  <div class="card-header">
+    <div class="card-icon icon-conviction">🎯</div>
+    <div class="card-name">Conviction Engine</div>
+    <div class="card-tag tag-v7">v7</div>
+  </div>
+  <div class="card-body">
+    Detects when <strong>multiple strategies agree</strong> on the same market and direction. If Latency and Flash both want YES on the same market, that's higher conviction — the bet gets a <strong>1.5x boost</strong>. Three strategies agreeing gets 1.8x.
+    <br><br>
+    This is the only system that looks across strategies. Everything else operates within a single strategy. When the whole bot agrees, it bets bigger.
+  </div>
+  <div class="example-box">
+    <div class="label">Example</div>
+    <span class="ex-blue">LATENCY signals YES (BTC just pumped)</span><br>
+    <span class="ex-blue">FLASH signals YES (token is cheap at $0.15)</span><br>
+    <span class="ex-green">→ Conviction: 2 strategies agree → 1.5x bonus</span><br>
+    <span class="ex-dim">$88 base × 1.5 = $132 bet instead of $88</span>
+  </div>
+</div>
+
+<div class="card card-momentum">
+  <div class="card-header">
+    <div class="card-icon icon-momentum">🚧</div>
+    <div class="card-name">Momentum Guard</div>
+    <div class="card-tag tag-v7">v7</div>
+  </div>
+  <div class="card-body">
+    A <strong>blocker, not a booster</strong>. Watches if BTC has been moving consistently in one direction for 3+ minutes. If so, it blocks any strategy from betting against that direction — even if the regime engine hasn't classified it as trending yet.
+    <br><br>
+    Works with the v8.1 Fast Trend Safety (0.15% in 2 min) as a double layer. Momentum Guard catches slow sustained moves. Fast Trend catches sharp recent ones.
+  </div>
+  <div class="example-box">
+    <div class="label">Example</div>
+    <span class="ex-dim">BTC climbing steadily: $68,500 → $68,620 over 4 min</span><br>
+    <span class="ex-red">Momentum Guard: "BTC sustained UP for 4 min"</span><br>
+    <span class="ex-red">→ Blocks all NO trades regardless of strategy</span><br>
+    <span class="ex-dim">Even if regime says FLAT (it's lagging)</span>
+  </div>
+</div>
+
+<div class="card card-streak">
+  <div class="card-header">
+    <div class="card-icon icon-streak">🔥</div>
+    <div class="card-name">Win Streak Sizer</div>
+    <div class="card-tag tag-v7">v7</div>
+  </div>
+  <div class="card-body">
+    Simple but powerful: when you're on a <strong>hot streak, bet more</strong>. 3 consecutive wins = 1.2x. 4 wins = 1.3x. 5+ wins = 1.4x. Resets on any loss.
+    <br><br>
+    This captures the reality that winning streaks often happen when market conditions are favorable. If you're reading the market right, lean into it. One loss and you're back to normal.
+  </div>
+  <div class="example-box">
+    <div class="label">Example</div>
+    <span class="ex-green">Win → Win → Win → Win</span><br>
+    <span class="ex-green">4-streak active → all bets × 1.3x</span><br>
+    <span class="ex-red">Next trade: Loss</span><br>
+    <span class="ex-dim">→ Reset to 1.0x immediately</span>
+  </div>
+</div>
+
+<!-- ═══ v8 MARKET INTEL ═══ -->
+<div class="section-label">🔍 v8 Market Intelligence</div>
+
+<div class="card card-token">
+  <div class="card-header">
+    <div class="card-icon icon-token">💹</div>
+    <div class="card-name">Token Price Feed</div>
+    <div class="card-tag tag-v8">v8</div>
+  </div>
+  <div class="card-body">
+    Before v8, the bot only watched <strong>Binance BTC price</strong>. It was blind to what Polymarket tokens were actually doing. Token Feed tracks YES/NO prices every 10 seconds and calculates:
+    <br><br>
+    <strong>Velocity</strong> — is the token price accelerating or decelerating? Used by MeanReversion to detect when a drop is slowing down (time to buy the bounce).<br>
+    <strong>Divergence</strong> — is the token moving differently from BTC? If BTC is flat but YES is climbing, someone knows something.<br>
+    <strong>Smart money</strong> — token moving without a BTC cause means hidden buying/selling pressure.
+  </div>
+  <div class="example-box">
+    <div class="label">What it sees</div>
+    <span class="ex-dim">YES price: $0.35 → $0.22 → $0.19 → $0.18 → $0.18</span><br>
+    <span class="ex-blue">Token dropped 49% but DECELERATING (slowing)</span><br>
+    <span class="ex-green">→ MeanReversion: "Drop exhausting, buy the bounce"</span>
+  </div>
+</div>
+
+<div class="card card-book">
+  <div class="card-header">
+    <div class="card-icon icon-book">📚</div>
+    <div class="card-name">Order Book Intel</div>
+    <div class="card-tag tag-v8">v8</div>
+  </div>
+  <div class="card-body">
+    Reads the Polymarket order book every 8-10 seconds. Calculates <strong>bid/ask depth</strong> (how much money is stacked on each side), <strong>imbalance ratio</strong> (buyers vs sellers), and detects <strong>whales</strong> (single orders over $200).
+    <br><br>
+    Flash uses it to avoid buying when there's a thick sell wall (asks 2.5x bigger than bids = sellers dominating, price will keep dropping). MeanReversion uses it to confirm that bid support is forming before buying the bounce.
+  </div>
+  <div class="example-box">
+    <div class="label">What it sees</div>
+    <span class="ex-dim">YES book: $340 in bids, $890 in asks</span><br>
+    <span class="ex-red">Imbalance: 0.38 (sellers dominating)</span><br>
+    <span class="ex-red">→ Flash: "Sell wall detected, skip this entry"</span><br><br>
+    <span class="ex-dim">YES book: $600 in bids, $200 in asks</span><br>
+    <span class="ex-green">Imbalance: 3.0 (buyers stepping in)</span><br>
+    <span class="ex-green">→ MeanReversion: "Support forming, safe to buy"</span>
+  </div>
+</div>
+
+<!-- ═══ HOW THEY ALL CONNECT ═══ -->
+<div class="section-label">🔗 How They All Connect</div>
+
+<div class="card" style="border-color: #374151;">
+  <div class="card-body" style="color: #d1d5db; font-size: 14px;">
+    When a trade signal appears, here's the full chain that decides the final bet size:
+  </div>
+  <div class="example-box" style="line-height: 2.2;">
+    <div class="label">Sizing Chain Example — Latency YES @ $0.18</div>
+    <span class="ex-dim">Base:</span> <span class="ex-blue">$1,470 × 6%</span> <span class="ex-dim">= $88.20</span><br>
+    <span class="ex-dim">× Adaptive Sizer:</span> <span class="ex-green">1.1x</span> <span class="ex-dim">= $97.02</span><br>
+    <span class="ex-dim">× Trend mult:</span> <span class="ex-green">1.2x</span> <span class="ex-dim">(TRENDING_UP) = $116.42</span><br>
+    <span class="ex-dim">× Conviction:</span> <span class="ex-green">1.5x</span> <span class="ex-dim">(Flash agrees) = $174.64</span><br>
+    <span class="ex-dim">× Win streak:</span> <span class="ex-green">1.3x</span> <span class="ex-dim">(4 wins) = $227.03</span><br>
+    <span class="ex-dim">× Time of day:</span> <span class="ex-yellow">1.0x</span> <span class="ex-dim">= $227.03</span><br>
+    <span class="ex-dim">× Market penalty:</span> <span class="ex-yellow">1.0x</span> <span class="ex-dim">(no losses) = $227.03</span><br>
+    <span class="ex-dim">× Manager trust:</span> <span class="ex-green">1.5x</span> <span class="ex-dim">(hot) = $340.54</span><br>
+    <span class="ex-red">→ CAPPED at $147</span> <span class="ex-dim">(10% hard max)</span><br>
+    <span class="ex-green">Final bet: $147.00</span>
+  </div>
+</div>
+
+</div>
+</body>
+</html>
