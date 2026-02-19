@@ -1844,13 +1844,18 @@ class S_Latency:
         # which is profitable because avg win is 3.5x avg loss. $0.35 max, R:R is 1.8:1.
         max_price = 0.35
         
-        # v9.2: TREND RIDER MODE — when BTC move is LARGE (0.20%+) and we're with-trend,
-        # allow buying up to $0.55. This is the gap: in downtrends, NO is $0.40-0.60 
-        # and we never buy it. But the $438K bot buys exactly these — confirmed direction,
-        # moderate price, posted as maker orders for 0% fee.
-        if abs(chg) >= 0.002:  # 0.20%+ move = strong signal
-            if trend and ((up and trend.trend_dir > 0) or (not up and trend.trend_dir < 0)):
-                max_price = 0.55  # allow mid-range with-trend
+        # v9.2: TREND RIDER MODE — when BTC confirms direction, buy the winning side
+        # even at higher prices. This is what the $438K bot does.
+        # Tier 1: 0.10%+ move with trend → up to $0.60
+        # Tier 2: 0.15%+ move with trend → up to $0.80 (covers typical downtrend NO $0.70-0.80)
+        # Tier 3: 0.25%+ move with strong trend → up to $0.88 (near-certain outcomes)
+        if trend and ((up and trend.trend_dir > 0) or (not up and trend.trend_dir < 0)):
+            if abs(chg) >= 0.0025 and abs(trend.trend_strength) > 0.25:
+                max_price = 0.88  # strong confirmed trend — near-certain
+            elif abs(chg) >= 0.0015:
+                max_price = 0.80  # confirmed trend — covers typical downtrend NO
+            elif abs(chg) >= 0.0010:
+                max_price = 0.60  # basic trend confirmation
         
         if target_price > max_price or target_price < 0.12: return None
 
@@ -1864,11 +1869,21 @@ class S_Latency:
         # Trend bonus
         if (up and trend.trend_dir > 0) or (not up and trend.trend_dir < 0):
             confidence = min(0.95, confidence + 0.05)
+            # v9.2: Extra bonus for strong trend confirmation
+            if abs(trend.trend_strength) > 0.30:
+                confidence = min(0.95, confidence + 0.05)
 
         # Need edge to overcome fees + variance
-        # v9.2: At higher prices (trend rider mode), lower edge threshold
-        # because we're buying a likely winner, not a cheap longshot
-        min_edge = 0.10 if target_price > 0.35 else 0.15
+        # v9.2: Tiered edge requirements based on price range
+        # High prices = buying near-certain outcomes = less edge needed
+        if target_price > 0.65:
+            min_edge = 0.03  # at $0.75, need conf > 0.78 — very achievable with confirmed trend
+        elif target_price > 0.45:
+            min_edge = 0.06  # mid-range
+        elif target_price > 0.35:
+            min_edge = 0.10
+        else:
+            min_edge = 0.15  # cheap tokens need more edge (higher variance)
         edge = confidence - target_price
         if edge < min_edge: return None
 
@@ -3996,7 +4011,7 @@ class Bot:
                         sz = sz * conv_bonus * streak_mult * tod_mult * market_penalty
                         sz = sz * s.cortex.get_trust("LATENCY") * s.cortex.get_macro_mult(sig.get("dir", sig.get("side", "YES"))) * s.cortex.get_session_mult() * s.cortex.get_danger_mult() * s.cortex.get_side_mult(sig["dir"]) * (lc_yes if sig["dir"] == "YES" else lc_no)  # v9: Cortex + Lifecycle
                         sz = min(sz, av, max_market_risk - market_risk, hard_max)
-                        if sz >= 1.0 and 0.08 <= p <= 0.45:
+                        if sz >= 1.0 and 0.08 <= p <= 0.88:
                             # No confirmation delay — latency edge IS speed
                             bonus_tag = f" CONV:{conv_bonus:.1f}x" if conv_bonus > 1 else ""
                             s.strats["LATENCY"] = f"ACTIVE {sig['dir']} edge={sig['edge']*100:.1f}%{bonus_tag}"
@@ -4124,7 +4139,7 @@ class Bot:
                         # v8.1: HARD CAP at 3% — lottery tickets stay small, no multiplier override
                         squeeze_cap = s.risk.show_bal * 0.03
                         sz = min(sz, av, max_market_risk - market_risk, hard_max, squeeze_cap)
-                        if sz >= 0.50 and p <= 0.20:
+                        if sz >= 0.50 and p <= 0.22:
                             tl_left = sig["squeeze_count"]
                             s.strats["SQUEEZE"] = f"LOTTERY {sig['dir']} ${p:.2f} {tl_left}s left"
                             sh = max(sz / p, 5.0)
