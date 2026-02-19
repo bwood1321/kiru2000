@@ -285,7 +285,7 @@ class PolyWS:
 
 
 # ═══════════════════════════════════════════════════════════════
-# ─── MARKET FINDER ───
+# ─── MARKET FINDER (from v9 — proven working) ───
 # ═══════════════════════════════════════════════════════════════
 class Finder:
     def __init__(s, host):
@@ -293,101 +293,62 @@ class Finder:
         s._http = requests.Session()
         s._http.headers["User-Agent"] = "PolyBot/10"
         s._cache = {}
-        s._slug_pattern = None  # learned from first successful find
-        s._search_fails = 0
+        s._last_market = None
 
     def find(s):
         """Find the current active BTC 15-min market."""
         now = datetime.now(timezone.utc)
-
-        # Method 1: Construct slug from timestamp (fast, no API call if cached)
         mb = (now.minute // 15) * 15
         base = now.replace(minute=mb, second=0, microsecond=0)
-        for off in [0, -15, 15, -30, 30]:
+        for off in [0, -15, 15, -30]:
             ts = int((base + timedelta(minutes=off)).timestamp())
-            # Try multiple slug formats
-            for fmt in ["btc-updown-15m-{}", "will-btc-go-up-or-down-in-the-next-15-minutes-{}"]:
-                slug = fmt.format(ts)
-                m = s._get(slug)
-                if m and m.active:
-                    tl = (m.end - now).total_seconds()
-                    if tl > 30: return m
-
-        # Method 2: Search Gamma API (slower but finds any format)
-        if s._search_fails < 10:  # don't spam if search keeps failing
-            m = s._search()
-            if m: return m
-
-        return None
-
-    def _search(s):
-        """Search Gamma API for active BTC 15-min markets."""
-        now = datetime.now(timezone.utc)
-        try:
-            # Try different search queries
-            for query in [
-                f"{s.host}/markets?active=true&closed=false&limit=20&tag=btc",
-                f"{s.host}/markets?active=true&closed=false&limit=20&slug_contains=btc-updown",
-                f"{s.host}/markets?active=true&closed=false&limit=50",
-            ]:
-                r = s._http.get(query, timeout=8)
-                if r.status_code != 200: continue
-                data = r.json()
-                if not isinstance(data, list): continue
-                for d in data:
-                    q = (d.get("question", "") + d.get("slug", "")).lower()
-                    # Match BTC 15-minute markets
-                    if ("btc" in q or "bitcoin" in q) and ("15" in q or "updown" in q or "up or down" in q):
-                        slug = d.get("slug", "")
-                        if not slug: continue
-                        m = s._parse(d)
-                        if m and m.active:
-                            tl = (m.end - now).total_seconds()
-                            if tl > 30:
-                                log.info(f"Finder: SEARCH found market: {slug}")
-                                # Learn the pattern for future fast lookups
-                                if not s._slug_pattern and "-" in slug:
-                                    parts = slug.rsplit("-", 1)
-                                    if parts[-1].isdigit():
-                                        s._slug_pattern = parts[0] + "-{}"
-                                        log.info(f"Finder: learned slug pattern: {s._slug_pattern}")
-                                s._cache[slug] = m
-                                s._search_fails = 0
-                                return m
-        except Exception as e:
-            log.debug(f"Finder search fail: {e}")
-        s._search_fails += 1
+            slug = f"btc-updown-15m-{ts}"
+            m = s._get(slug)
+            if m and m.active:
+                tl = (m.end - now).total_seconds()
+                if tl > 30:
+                    s._last_market = m
+                    return m
+        # Return cached if still valid
+        if s._last_market:
+            tl = (s._last_market.end - now).total_seconds()
+            if tl > 30 and s._last_market.active:
+                return s._last_market
         return None
 
     def _get(s, slug):
+        """Fetch market by slug using query params (Gamma API format)."""
         if slug in s._cache:
             cached = s._cache[slug]
-            # Check if cached market is still valid
             tl = (cached.end - datetime.now(timezone.utc)).total_seconds()
-            if tl < 0:  # expired
+            if tl < -60:
                 s._cache.pop(slug, None)
                 return None
             return cached
         try:
-            r = s._http.get(f"{s.host}/markets/{slug}", timeout=5)
+            r = s._http.get(f"{s.host}/markets", params={"slug": slug}, timeout=8)
             if r.status_code != 200: return None
             d = r.json()
+            if isinstance(d, list): d = d[0] if d else None
+            if not d or not (d.get("condition_id") or d.get("conditionId")): return None
             m = s._parse(d)
             if m:
                 s._cache[slug] = m
-                if len(s._cache) > 30:
-                    # Clean expired entries
+                # Clean old cache
+                if len(s._cache) > 20:
                     now = datetime.now(timezone.utc)
-                    expired = [k for k, v in s._cache.items() if (v.end - now).total_seconds() < -300]
+                    expired = [k for k, v in s._cache.items()
+                               if (v.end - now).total_seconds() < -300]
                     for k in expired: s._cache.pop(k, None)
             return m
-        except:
+        except Exception as e:
+            log.debug(f"Finder._get({slug}): {e}")
             return None
 
     def _parse(s, d):
         """Parse a Gamma API market dict into a Market object."""
         try:
-            tok = d.get("clobTokenIds") or d.get("clob_token_ids") or []
+            tok = d.get("clobTokenIds") or d.get("clob_token_ids") or ""
             if isinstance(tok, str):
                 tok = json.loads(tok) if tok.startswith("[") else tok.split(",")
             if not tok or len(tok) < 2: return None
@@ -407,12 +368,24 @@ class Finder:
         except:
             return None
 
-    def check_resolution(s, market):
-        """Check if a market has resolved. Returns True/False/None."""
+    def check_resolution(s, slug):
+        """Check if a market has resolved. Returns outcome prices or None."""
         try:
-            r = s._http.get(f"{s.host}/markets/{market.slug}", timeout=5)
+            r = s._http.get(f"{s.host}/markets", params={"slug": slug}, timeout=5)
             if r.status_code != 200: return None
             d = r.json()
+            if isinstance(d, list): d = d[0] if d else None
+            if not d: return None
+            if d.get("closed") or d.get("resolved"):
+                pr = d.get("outcomePrices") or d.get("outcome_prices") or ""
+                if isinstance(pr, str):
+                    try: pr = json.loads(pr)
+                    except: return None
+                if len(pr) >= 2:
+                    return float(pr[0]) > 0.5  # True = YES won
+            return None
+        except:
+            return None
             if d.get("closed") or d.get("resolved"):
                 pr = d.get("outcomePrices") or d.get("outcome_prices") or ""
                 if isinstance(pr, str):
@@ -1154,12 +1127,14 @@ class Bot:
             age = (datetime.now(timezone.utc) - t.market_end).total_seconds()
             if age < 30: continue  # too soon
 
-            # Check Gamma API
+            # Check Gamma API (using query params like v9)
             try:
-                r = s.finder._http.get(f"{s.c.gamma_host}/markets/{t.slug}", timeout=5)
+                r = s.finder._http.get(f"{s.c.gamma_host}/markets",
+                                       params={"slug": t.slug}, timeout=5)
                 if r.status_code == 200:
                     d = r.json()
-                    if d.get("closed") or d.get("resolved"):
+                    if isinstance(d, list): d = d[0] if d else None
+                    if d and (d.get("closed") or d.get("resolved")):
                         pr = d.get("outcomePrices") or d.get("outcome_prices") or ""
                         if isinstance(pr, str):
                             try: pr = json.loads(pr)
