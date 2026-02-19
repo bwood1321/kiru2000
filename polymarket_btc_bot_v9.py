@@ -250,8 +250,10 @@ class Feed:
         return np.array([x["p"] for x in d]) if d else np.array([])
     def chg(s, sec=60):
         if len(s.data) < 2: return 0
-        now = s.data[-1]; cut = now["t"] - sec; old = s.data[0]
-        for p in s.data:
+        snap = list(s.data)
+        if len(snap) < 2: return 0
+        now = snap[-1]; cut = now["t"] - sec; old = snap[0]
+        for p in snap:
             if p["t"] >= cut: old = p; break
         return (now["p"] - old["p"]) / old["p"] if old["p"] else 0
     def volatility(s, sec=300):
@@ -262,7 +264,8 @@ class Feed:
     def vwap_trend(s, sec=120):
         if len(s.data) < 10: return 0
         cut = time.time() - sec
-        prices = [(d["p"], d["t"]) for d in s.data if d["t"] >= cut]
+        snap = list(s.data)
+        prices = [(d["p"], d["t"]) for d in snap if d["t"] >= cut]
         if len(prices) < 5: return 0
         vwap = np.mean([p for p, _ in prices])
         return (prices[-1][0] - vwap) / vwap
@@ -860,10 +863,12 @@ class TokenFeed:
         """Price change for YES or NO token over last N seconds."""
         if len(s.data) < 3: return 0
         key = "yes" if side == "YES" else "no"
-        now = s.data[-1]
+        snap = list(s.data)
+        if len(snap) < 3: return 0
+        now = snap[-1]
         cut = now["t"] - sec
-        old = s.data[0]
-        for p in s.data:
+        old = snap[0]
+        for p in snap:
             if p["t"] >= cut: old = p; break
         if old[key] <= 0: return 0
         return (now[key] - old[key]) / old[key]
@@ -872,7 +877,8 @@ class TokenFeed:
         """Rate of price change (acceleration). Positive = price rising faster."""
         if len(s.data) < 6: return 0
         key = "yes" if side == "YES" else "no"
-        prices = [(d[key], d["t"]) for d in s.data if d["t"] >= time.time() - sec]
+        snap = list(s.data)
+        prices = [(d[key], d["t"]) for d in snap if d["t"] >= time.time() - sec]
         if len(prices) < 4: return 0
         mid = len(prices) // 2
         first_half = [p for p, _ in prices[:mid]]
