@@ -386,16 +386,6 @@ class Finder:
             return None
         except:
             return None
-            if d.get("closed") or d.get("resolved"):
-                pr = d.get("outcomePrices") or d.get("outcome_prices") or ""
-                if isinstance(pr, str):
-                    try: pr = json.loads(pr)
-                    except: return None
-                if len(pr) >= 2:
-                    yes_final = float(pr[0])
-                    return yes_final > 0.5  # True = YES won, False = NO won
-            return None
-        except: return None
 
 
 # ═══════════════════════════════════════════════════════════════
