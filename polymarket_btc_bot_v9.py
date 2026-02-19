@@ -2325,7 +2325,9 @@ class Executor:
                 except: continue
         except: pass
         return None
-    def order(s, market, is_yes, price, size):
+    def order(s, market, is_yes, price, size, mode="taker"):
+        """Place an order. Modes: 'taker' (FOK), 'maker' (GTC limit), 'hybrid' (try maker, fallback taker).
+        Returns (order_id, actual_shares) or (None, None) on failure."""
         from py_clob_client.clob_types import MarketOrderArgs, OrderArgs, OrderType
         from py_clob_client.order_builder.constants import BUY
         label = "YES" if is_yes else "NO"
@@ -2334,46 +2336,185 @@ class Executor:
         if dollar_amount < 0.50: dollar_amount = 0.50
         if s.c.dry_run:
             oid = f"DRY-{int(time.time()*1000)%99999}"
-            log.info(f"DRY: ${dollar_amount:.2f} {label}")
+            log.info(f"DRY [{mode.upper()}]: ${dollar_amount:.2f} {label}")
             return oid, None
         if not s.authed: return None, None
         tid = market.tok_yes if is_yes else market.tok_no
+
+        if mode == "maker":
+            return s._order_maker(tid, label, price, size, dollar_amount, timeout=30, retries=2)
+        elif mode == "hybrid":
+            return s._order_hybrid(tid, label, price, size, dollar_amount)
+        else:  # taker (default, unchanged behavior)
+            return s._order_taker(tid, label, price, size, dollar_amount)
+
+    def _order_taker(s, tid, label, price, size, dollar_amount):
+        """FOK taker order — instant fill or cancel. Pays taker fee."""
+        from py_clob_client.clob_types import MarketOrderArgs, OrderArgs, OrderType
+        from py_clob_client.order_builder.constants import BUY
         try:
             market_order = MarketOrderArgs(token_id=tid, amount=dollar_amount, side=BUY)
             signed = s.client.create_market_order(market_order)
             resp = s.client.post_order(signed, OrderType.FOK)
-            if isinstance(resp, dict):
-                oid = resp.get("orderID") or resp.get("id") or resp.get("order_id") or "?"
-                status = resp.get("status", "")
-                actual_shares = None
-                taking = resp.get("takingAmount")
-                if taking:
-                    try:
-                        val = float(taking)
-                        actual_shares = val / 1e6 if val > 1000 else val
-                    except: pass
-                log.info(f"MARKET ORDER: ${dollar_amount:.2f} {label} id={oid} st={status} shares={actual_shares}")
-                if oid != "?": return oid, actual_shares
-            elif isinstance(resp, str) and len(resp) > 5:
-                log.info(f"MARKET ORDER: ${dollar_amount:.2f} {label} resp={resp[:60]}")
-                return resp, None
+            oid, shares = s._parse_resp(resp, label, dollar_amount, "TAKER-FOK")
+            if oid: return oid, shares
         except Exception as e:
-            log.error(f"Market order fail: {e}")
+            log.error(f"Taker FOK fail: {e}")
+        # Fallback: GTC limit 1c below (legacy behavior)
         try:
             maker_price = round(max(0.01, min(price - 0.01, 0.99)), 2)
             limit_size = max(size, 5.0)
             signed = s.client.create_order(OrderArgs(
                 price=maker_price, size=round(limit_size, 2), side=BUY, token_id=tid))
             resp = s.client.post_order(signed, OrderType.GTC)
-            if isinstance(resp, dict):
-                oid = resp.get("orderID") or resp.get("id") or resp.get("order_id") or "?"
-                status = resp.get("status", "")
-                log.info(f"LIMIT ORDER: ${maker_price*limit_size:.2f} {label} ({limit_size:.2f}sh @ ${maker_price}) id={oid} st={status}")
-                if oid != "?": return oid, 0  # 0 shares = unfilled limit, NOT None
-            elif isinstance(resp, str) and len(resp) > 5:
-                return resp, None
+            oid, shares = s._parse_resp(resp, label, maker_price * limit_size, "TAKER-FALLBACK-GTC")
+            if oid: return oid, 0
         except Exception as e:
-            log.error(f"Limit order fail: {e}")
+            log.error(f"Taker fallback fail: {e}")
+        return None, None
+
+    def _order_maker(s, tid, label, price, size, dollar_amount, timeout=30, retries=2):
+        """GTC maker order — zero fees + rebate. Posts limit order and waits for fill.
+        Posts at best_bid + 0.01 (or price - 0.01) to sit at top of book."""
+        from py_clob_client.clob_types import OrderArgs, OrderType, OpenOrderParams
+        from py_clob_client.order_builder.constants import BUY
+        # Get best bid to post just above it (top of book, still maker)
+        maker_price = round(max(0.01, min(price - 0.01, 0.99)), 2)
+        try:
+            book = s.client.get_order_book(tid)
+            if isinstance(book, dict):
+                bids = book.get("bids", [])
+                asks = book.get("asks", [])
+                if bids:
+                    best_bid = float(bids[0].get("price", 0))
+                    # Post 1 tick above best bid to be first in line, but below ask
+                    maker_price = round(min(best_bid + 0.01, price - 0.01), 2)
+                if asks:
+                    best_ask = float(asks[0].get("price", 0))
+                    # Never post at or above ask (would be taker)
+                    maker_price = round(min(maker_price, best_ask - 0.01), 2)
+        except:
+            pass  # use default price - 0.01
+        maker_price = round(max(0.01, min(maker_price, 0.99)), 2)
+        limit_size = max(size, 5.0)
+
+        for attempt in range(retries):
+            try:
+                signed = s.client.create_order(OrderArgs(
+                    price=maker_price, size=round(limit_size, 2), side=BUY, token_id=tid))
+                resp = s.client.post_order(signed, OrderType.GTC)
+                oid, _ = s._parse_resp(resp, label, maker_price * limit_size, f"MAKER-GTC(try{attempt+1})")
+                if not oid:
+                    continue
+
+                # Wait for fill — poll every 2 seconds
+                fill_deadline = time.time() + timeout
+                while time.time() < fill_deadline:
+                    time.sleep(2)
+                    try:
+                        orders = s.client.get_orders(OpenOrderParams())
+                        # If our order is no longer in open orders, it was filled
+                        still_open = any(
+                            (o.get("id") == oid or o.get("orderID") == oid)
+                            for o in (orders if isinstance(orders, list) else [])
+                        )
+                        if not still_open:
+                            log.info(f"MAKER FILLED: {label} @ ${maker_price} id={oid}")
+                            return oid, limit_size  # filled
+                    except:
+                        pass
+
+                # Not filled in time — cancel
+                try:
+                    s.client.cancel(order_id=oid)
+                    log.info(f"MAKER CANCELLED (unfilled after {timeout}s): {label} @ ${maker_price}")
+                except:
+                    pass
+
+                # Retry with slightly better price
+                maker_price = round(min(maker_price + 0.01, price), 2)
+
+            except Exception as e:
+                log.error(f"Maker order attempt {attempt+1} fail: {e}")
+
+        log.info(f"MAKER GAVE UP after {retries} attempts: {label}")
+        return None, None
+
+    def _order_hybrid(s, tid, label, price, size, dollar_amount):
+        """Try maker first (5s), fall back to taker if not filled. Best of both worlds."""
+        from py_clob_client.clob_types import OrderArgs, OrderType, OpenOrderParams, MarketOrderArgs
+        from py_clob_client.order_builder.constants import BUY
+        # Step 1: Try maker with short timeout
+        maker_price = round(max(0.01, min(price - 0.01, 0.99)), 2)
+        try:
+            book = s.client.get_order_book(tid)
+            if isinstance(book, dict):
+                bids = book.get("bids", [])
+                asks = book.get("asks", [])
+                if bids:
+                    best_bid = float(bids[0].get("price", 0))
+                    maker_price = round(min(best_bid + 0.01, price - 0.01), 2)
+                if asks:
+                    best_ask = float(asks[0].get("price", 0))
+                    maker_price = round(min(maker_price, best_ask - 0.01), 2)
+        except:
+            pass
+        maker_price = round(max(0.01, min(maker_price, 0.99)), 2)
+        limit_size = max(size, 5.0)
+
+        try:
+            signed = s.client.create_order(OrderArgs(
+                price=maker_price, size=round(limit_size, 2), side=BUY, token_id=tid))
+            resp = s.client.post_order(signed, OrderType.GTC)
+            oid, _ = s._parse_resp(resp, label, maker_price * limit_size, "HYBRID-MAKER")
+
+            if oid:
+                # Wait 5 seconds for fill
+                fill_deadline = time.time() + 5
+                while time.time() < fill_deadline:
+                    time.sleep(1)
+                    try:
+                        orders = s.client.get_orders(OpenOrderParams())
+                        still_open = any(
+                            (o.get("id") == oid or o.get("orderID") == oid)
+                            for o in (orders if isinstance(orders, list) else [])
+                        )
+                        if not still_open:
+                            log.info(f"HYBRID MAKER FILLED: {label} @ ${maker_price} id={oid} (ZERO FEE)")
+                            return oid, limit_size
+                    except:
+                        pass
+
+                # Not filled — cancel maker
+                try:
+                    s.client.cancel(order_id=oid)
+                    log.info(f"HYBRID: maker unfilled, cancelling, switching to taker")
+                except:
+                    pass
+        except Exception as e:
+            log.error(f"Hybrid maker phase fail: {e}")
+
+        # Step 2: Fall back to taker FOK
+        log.info(f"HYBRID TAKER FALLBACK: {label} @ ${price}")
+        return s._order_taker(tid, label, price, size, dollar_amount)
+
+    def _parse_resp(s, resp, label, amount, tag):
+        """Parse order response, return (order_id, actual_shares) or (None, None)."""
+        if isinstance(resp, dict):
+            oid = resp.get("orderID") or resp.get("id") or resp.get("order_id") or "?"
+            status = resp.get("status", "")
+            actual_shares = None
+            taking = resp.get("takingAmount")
+            if taking:
+                try:
+                    val = float(taking)
+                    actual_shares = val / 1e6 if val > 1000 else val
+                except: pass
+            log.info(f"{tag}: ${amount:.2f} {label} id={oid} st={status} shares={actual_shares}")
+            if oid != "?": return oid, actual_shares
+        elif isinstance(resp, str) and len(resp) > 5:
+            log.info(f"{tag}: ${amount:.2f} {label} resp={resp[:60]}")
+            return resp, None
         return None, None
     def prices(s, m):
         """Get current YES/NO prices. Prioritizes order book (matches Polymarket UI)."""
@@ -3765,9 +3906,9 @@ class Bot:
                 sz = min(sz, av, max_market_risk - market_risk, hard_max)
                 if sz >= 1.0:
                     s.strats["ARB"] = f"ACTIVE {sig['side']} pair=${sig['pair']:.4f}"
-                    s.dash.ev(f"[ARB] {sig['side']} ${sz:.2f} pair=${sig['pair']:.3f}")
+                    s.dash.ev(f"[ARB·MKR] {sig['side']} ${sz:.2f} pair=${sig['pair']:.3f}")
                     shares = sz / sig["price"]
-                    oid, actual_shares = s.ex.order(m, sig["yes"], sig["price"], shares)
+                    oid, actual_shares = s.ex.order(m, sig["yes"], sig["price"], shares, mode="maker")
                     if oid:
                         t = Trd(datetime.now(timezone.utc), "ARB", m.slug, sig["side"], sig["price"], sz, oid=oid)
                         s.risk.open(t, market_end=m.end, actual_shares=actual_shares, entry_regime=s.trend.regime if s.trend else "UNKNOWN")
@@ -3807,8 +3948,8 @@ class Bot:
                             s.strats["LATENCY"] = f"ACTIVE {sig['dir']} edge={sig['edge']*100:.1f}%{bonus_tag}"
                             sh = max(sz / p, 5.0)
                             if sh * p > av: sh = av / p
-                            s.dash.ev(f"[LAT] {sig['dir']} ${sz:.2f} BTC{sig['chg']*100:+.2f}%")
-                            oid, actual_shares = s.ex.order(m, sig["yes"], p, sh)
+                            s.dash.ev(f"[LAT·HYB] {sig['dir']} ${sz:.2f} BTC{sig['chg']*100:+.2f}%")
+                            oid, actual_shares = s.ex.order(m, sig["yes"], p, sh, mode="hybrid")
                             if oid:
                                 t = Trd(datetime.now(timezone.utc), "LATENCY", m.slug, sig["dir"], p, sz, oid=oid)
                                 s.risk.open(t, market_end=m.end, actual_shares=actual_shares, entry_regime=s.trend.regime if s.trend else "UNKNOWN"); s.cd["lat"] = time.time()
@@ -3973,8 +4114,8 @@ class Bot:
                     s.strats["GRINDER"] = f"ACTIVE {sig['dir']} @ ${p:.2f} +{profit_pct:.1f}%"
                     sh = max(sz / p, 5.0)
                     if sh * p > av: sh = av / p
-                    s.dash.ev(f"[GRIND] {sig['dir']} ${sz:.2f} @ ${p:.2f} +{profit_pct:.1f}%")
-                    oid, actual_shares = s.ex.order(m, sig["yes"], p, sh)
+                    s.dash.ev(f"[GRIND·MKR] {sig['dir']} ${sz:.2f} @ ${p:.2f} +{profit_pct:.1f}%")
+                    oid, actual_shares = s.ex.order(m, sig["yes"], p, sh, mode="maker")
                     if oid:
                         t = Trd(datetime.now(timezone.utc), "GRINDER", m.slug, sig["dir"], p, sz, oid=oid)
                         s.risk.open(t, market_end=m.end, actual_shares=actual_shares, entry_regime=s.trend.regime if s.trend else "UNKNOWN")
