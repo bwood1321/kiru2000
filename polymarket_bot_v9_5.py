@@ -3240,12 +3240,7 @@ class Dash:
     def render(s, c, conn, f, risk, mkt, strats, scores, orders, poly_pos,
                start_time=None, past_trades=None, trend=None, sizer=None,
                cortex=None, poly_ws=None, slot_markets=None, feeds=None, active_slot=""):
-        # v9.5: Buffer all output, then overwrite previous render in-place
-        # This preserves scroll buffer so user can scroll up to see boot info
-        import io, sys
-        _buf = io.StringIO()
-        _orig_stdout = sys.stdout
-        sys.stdout = _buf
+        os.system("cls" if os.name == "nt" else "clear")
         now = datetime.now().strftime("%H:%M:%S")
         rt = ""
         if start_time:
@@ -3468,7 +3463,7 @@ class Dash:
             elif regime == "BREAKOUT": rc = H2; arrow = "◆"
             elif regime == "CHOPPY": rc = WARN; arrow = "~"
             else: rc = DIM; arrow = "─"
-            print(f"  {LBL}AI{R}   {rc}{arrow} {regime}{R}")
+            print(f"  {LBL}AI{R}   {rc}{arrow} {regime}{R}  {DIM}⏱ {rt}{R}" if rt else f"  {LBL}AI{R}   {rc}{arrow} {regime}{R}")
 
         # ╔══════════════════════════════════════════════════════════════╗
         #  STRATEGIES — What each is doing
@@ -3605,19 +3600,6 @@ class Dash:
         # ── FOOTER ──
         print(f"\n  {DIM}{'─'*62}")
         print(f"  Ctrl+C to stop{R}")
-
-        # v9.5: Flush buffer, overwrite previous dashboard
-        sys.stdout = _orig_stdout
-        output = _buf.getvalue()
-        line_count = output.count('\n') + 1
-        if not hasattr(s, '_last_render_lines'):
-            s._last_render_lines = 0
-        if s._last_render_lines > 0:
-            # Move cursor up to overwrite previous dashboard
-            sys.stdout.write(f"\033[{s._last_render_lines}A\033[J")
-        sys.stdout.write(output)
-        sys.stdout.flush()
-        s._last_render_lines = line_count
 
 # ─── MAIN BOT v7 ───
 class Bot:
