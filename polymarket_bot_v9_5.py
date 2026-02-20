@@ -121,8 +121,12 @@ class Config:
     streak_pause_count: int = 5     # v7.1: was 3, raised to 5 — data showed wins after 2-3 loss streaks
     streak_pause_sec: int = 1800
 
+    # v9.5: Recovery mode — half sizes until balance recovers to $7K
+    recovery_target: float = 7000.0
+
     def get_base_size(s, strat, balance):
-        """Get base trade size — percentage of balance or fixed fallback."""
+        """Get base trade size — percentage of balance or fixed fallback.
+        v9.5: Half sizes when below recovery_target for capital preservation."""
         pct_map = {"ARB": s.arb_pct, "LATENCY": s.latency_pct,
                    "MOMENTUM": s.momentum_pct, "MEANREV": s.momentum_pct, "FLASH": s.flash_pct,
                    "SQUEEZE": s.squeeze_pct, "PAIR": 0.06, "SPIKE": 0.04}
@@ -130,8 +134,13 @@ class Config:
                      "MOMENTUM": s.momentum_size, "FLASH": s.flash_size}
         pct = pct_map.get(strat, 0.05)
         if pct > 0:
-            return round(balance * pct, 2)
-        return fixed_map.get(strat, 2.0)
+            size = round(balance * pct, 2)
+        else:
+            size = fixed_map.get(strat, 2.0)
+        # v9.5: Recovery mode — half sizes below target
+        if balance < s.recovery_target:
+            size = round(size * 0.50, 2)
+        return size
 
     @classmethod
     def from_env(cls):
@@ -1131,6 +1140,10 @@ class Cortex:
         # ── Trust scores (EV-based, replaces Manager) ──
         s._trades = {st: deque(maxlen=20) for st in s.STRATS}
         s._trust = {st: 1.0 for st in s.STRATS}
+        # v9.5: Per-slot trust (strategy × asset × timeframe)
+        # Keys like "FLASH:btc-15m", "LATENCY:eth-15m", "SQUEEZE:btc-5m"
+        s._slot_trades = {}   # {"FLASH:btc-15m": deque(maxlen=15)}
+        s._slot_trust = {}    # {"FLASH:btc-15m": 1.0}
 
         # ── Outcome memory (per-asset cross-market momentum) ──
         # v9.5: Track each asset individually, combine for overall view
@@ -1216,6 +1229,17 @@ class Cortex:
                 if strat in s._trades and size > 0:
                     s._trades[strat].append({"won": won, "pnl": pnl, "size": size})
 
+                # v9.5: Feed per-slot trust from slug in history
+                slug = t.get("slug", "")
+                if slug and strat in s.STRATS:
+                    _h_parts = slug.split("-")
+                    _h_asset = _h_parts[0] if _h_parts else "btc"
+                    _h_tf = "5m" if "5m" in slug else "15m"
+                    _h_sk = f"{strat}:{_h_asset}-{_h_tf}"
+                    if _h_sk not in s._slot_trades:
+                        s._slot_trades[_h_sk] = deque(maxlen=15)
+                    s._slot_trades[_h_sk].append({"won": won, "pnl": pnl, "size": size})
+
                 # Feed regime-strategy performance
                 if strat and regime != "UNKNOWN":
                     key = (strat, regime)
@@ -1236,11 +1260,19 @@ class Cortex:
             # Recalc all trust scores
             for st in s.STRATS:
                 s._recalc_trust(st)
-                # v9.4: Floor trust at 0.40 — old data shouldn't disable strategies
                 if s._trust[st] < 0.40:
                     s._trust[st] = 0.40
 
+            # v9.5: Recalc per-slot trust
+            for sk in s._slot_trades:
+                strat_name = sk.split(":")[0]
+                s._recalc_slot_trust(sk, strat_name)
+
+            # Log slot trust if any exist
+            slot_info = [f"{sk}={v:.2f}" for sk, v in s._slot_trust.items() if len(s._slot_trades.get(sk, [])) >= 3]
             log.info(f"Cortex loaded: {', '.join(f'{st}={s._trust[st]:.2f}' for st in s.STRATS)}")
+            if slot_info:
+                log.info(f"Slot trust: {', '.join(slot_info[:10])}")
         except Exception as e:
             log.debug(f"Cortex history load: {e}")
 
@@ -1373,12 +1405,20 @@ class Cortex:
     #  MEMORY — Learn from every trade
     # ═══════════════════════════════════════════════
 
-    def record_trade(s, strat, won, pnl, size, regime="UNKNOWN", btc_price=0, side=""):
+    def record_trade(s, strat, won, pnl, size, regime="UNKNOWN", btc_price=0, side="", slot_key=""):
         """Record a trade result. Updates ALL memory systems."""
-        # Trust scores
+        # Trust scores (global per-strategy)
         if strat in s._trades:
             s._trades[strat].append({"won": won, "pnl": pnl, "size": size})
             s._recalc_trust(strat)
+
+        # v9.5: Per-slot trust (strategy × asset × timeframe)
+        if slot_key and strat in s.STRATS:
+            sk = f"{strat}:{slot_key}"
+            if sk not in s._slot_trades:
+                s._slot_trades[sk] = deque(maxlen=15)
+            s._slot_trades[sk].append({"won": won, "pnl": pnl, "size": size})
+            s._recalc_slot_trust(sk, strat)
 
         # Session tracking
         s._session_pnl += pnl
@@ -1482,6 +1522,39 @@ class Cortex:
         # At 30% WR, losing streaks are NORMAL. Don't crush strategies for it.
         if strat not in ("LATENCY", "SQUEEZE") and s._trust[strat] < 0.40 and s._trust[strat] > 0.0:
             s._trust[strat] = 0.40
+
+    def _recalc_slot_trust(s, sk, strat):
+        """Per-slot trust. Same EV logic as global but per asset+timeframe.
+        Falls back to global trust until 3+ trades on this slot."""
+        trades = list(s._slot_trades.get(sk, []))
+        n = len(trades)
+        if n < 3:
+            s._slot_trust[sk] = s._trust.get(strat, 1.0)
+            return
+        recent = trades[-10:]
+        wins = sum(1 for t in recent if t["won"])
+        total = len(recent)
+        total_pnl = sum(t["pnl"] for t in recent)
+        total_wagered = sum(t["size"] for t in recent)
+        roi = total_pnl / total_wagered if total_wagered > 0 else 0
+        if roi > 0.30:
+            trust = 1.8 + min(roi * 0.5, 0.7)
+        elif roi > 0.10:
+            trust = 1.3 + roi * 2
+        elif roi > 0:
+            trust = 1.0 + roi * 3
+        elif roi > -0.20:
+            trust = 0.5 + max(roi + 0.20, 0) * 2.5
+        else:
+            trust = 0.25
+        last3 = trades[-3:]
+        if all(t["won"] for t in last3): trust *= 1.2
+        elif all(not t["won"] for t in last3): trust *= 0.7
+        if strat in ("LATENCY", "SQUEEZE"): trust = max(1.0, trust)
+        if n >= 6 and wins == 0: trust = 0.0
+        s._slot_trust[sk] = round(max(0.0, min(2.5, trust)), 2)
+        if strat not in ("LATENCY", "SQUEEZE") and s._slot_trust[sk] < 0.40 and s._slot_trust[sk] > 0.0:
+            s._slot_trust[sk] = 0.40
 
     def _discover_patterns(s):
         """Scan trade history for patterns nobody programmed.
@@ -1608,9 +1681,18 @@ class Cortex:
     #  DECISION — What strategies read
     # ═══════════════════════════════════════════════
 
-    def get_trust(s, strat):
-        """Trust score with regime affinity applied."""
-        base_trust = s._trust.get(strat, 1.0)
+    def get_trust(s, strat, slot_key=""):
+        """Trust score with per-slot + regime affinity applied.
+        v9.5: Uses per-slot trust if available (3+ trades), else global."""
+        # v9.5: Per-slot trust takes priority if we have data
+        if slot_key:
+            sk = f"{strat}:{slot_key}"
+            if sk in s._slot_trust and len(s._slot_trades.get(sk, [])) >= 3:
+                base_trust = s._slot_trust[sk]
+            else:
+                base_trust = s._trust.get(strat, 1.0)
+        else:
+            base_trust = s._trust.get(strat, 1.0)
 
         # Apply regime affinity if we know current regime
         regime_mult = 1.0
@@ -3212,8 +3294,11 @@ class Dash:
         sess_str = pnl_c2(sess_pnl)
 
         print(f"\n  {H1}┌{'─'*62}┐{R}")
+        recovery_tag = f"  {WARN}⚠ RECOVERY (½ size until ${c.recovery_target:,.0f}){R}" if risk.show_bal < c.recovery_target else ""
         print(f"  {H1}│{R}  {LBL}Balance{R}  {OK}${risk.show_bal:,.2f}{R}   {LBL}Available{R} {VAL}${risk.available:,.2f}{R}   {LBL}P&L{R} {pnl_str}       {H1}│{R}")
         print(f"  {H1}│{R}  {LBL}Record{R}   {OK}{w}W{R}/{ERR}{l}L{R} ({VAL}{wr:.0f}%{R})      {LBL}At Risk{R}  {WARN}${risk.open_risk:.2f}{R}      {LBL}Session{R} {sess_str}  {H1}│{R}")
+        if recovery_tag:
+            print(f"  {H1}│{R}{recovery_tag}                  {H1}│{R}")
         print(f"  {H1}└{'─'*62}┘{R}")
 
         # ╔══════════════════════════════════════════════════════════════╗
@@ -3248,7 +3333,16 @@ class Dash:
                     bar = f"{ERR}{'█'*bar_fill}{DIM}{'░'*(12-bar_fill)}{R}"
                     ic = "❄"
                 
-                print(f"  {H2}│{R}  {ic} {st:8} {bar} {VAL}{trust:.2f}x{R} {DIM}({n}t){R}                    {H2}│{R}")
+                # v9.5: Show per-slot trust if different from global
+                slot_info = ""
+                slot_data = []
+                for sk, st_val in cortex._slot_trust.items():
+                    if sk.startswith(f"{st}:") and len(cortex._slot_trades.get(sk, [])) >= 3:
+                        slot_name = sk.split(":")[1].upper()
+                        slot_data.append(f"{slot_name}={st_val:.1f}")
+                if slot_data:
+                    slot_info = f" {DIM}[{' '.join(slot_data[:3])}]{R}"
+                print(f"  {H2}│{R}  {ic} {st:8} {bar} {VAL}{trust:.2f}x{R} {DIM}({n}t){R}{slot_info}          {H2}│{R}")
 
             # Macro bias — per-asset + overall
             bias = cortex._macro_bias
@@ -3893,9 +3987,14 @@ class Bot:
                         s.market_losses.record_loss(p.slug)
                     # v9: Feed the Cortex
                     btc_p = s.feed.price if s.feed else 0
+                    # v9.5: Extract slot_key from position slug
+                    _pos_parts = p.slug.split("-") if p.slug else []
+                    _pos_asset = _pos_parts[0] if _pos_parts else "btc"
+                    _pos_tf = "5m" if "5m" in p.slug else "15m"
+                    _pos_slot = f"{_pos_asset}-{_pos_tf}"
                     s.cortex.record_trade(p.strat, p.pnl > 0, p.pnl, p.cost,
                         regime=s.trend.regime if s.trend else "UNKNOWN",
-                        btc_price=btc_p, side=p.side)
+                        btc_price=btc_p, side=p.side, slot_key=_pos_slot)
                     # v7: Smart redeem — trigger after wins
                     if p.pnl > 0:
                         s._last_win_market = time.time()
@@ -4138,6 +4237,114 @@ class Bot:
         if removed > 0:
             log.debug(f"Cleanup: removed {removed} old positions, {len(stale_keys)} stale confirms")
 
+    
+    def _cancel_exp(s):
+        now = datetime.now(timezone.utc)
+        # v9.5: Check ALL slot markets for expiring orders
+        any_expiring = False
+        for slot_key, slot in s.slot_state.items():
+            sm = slot.get("market")
+            if sm:
+                tl = (sm.end - now).total_seconds()
+                if 0 < tl < 120:
+                    any_expiring = True
+                    break
+        if any_expiring and s._orders:
+            try: s.ex.cancel_all(); s._orders = []; s.dash.ev("Cancelled — expiring")
+            except: pass
+
+    def _auto_redeem(s):
+        if not s._traded_cids: return
+        try:
+            # Only try 3 CIDs at a time to avoid rate limits
+            batch = list(s._traded_cids)[:3]
+            redeemed = s.ex.redeem_positions(batch)
+            for cid in redeemed:
+                s.dash.ev(f"REDEEMED {cid[:12]}...")
+                s._traded_cids.discard(cid)
+            s._save_traded_cids()
+            if redeemed:
+                time.sleep(5)  # Wait before balance check to avoid rate limit
+                rb = s.ex.get_balance()
+                if rb: s.risk.set_real(rb)
+        except Exception as e:
+            log.debug(f"Auto-redeem error: {e}")
+
+    def _cleanup(s):
+        """Periodic cleanup for long-running stability.
+        Only cleans MEMORY — all learning data stays in trade_data.json."""
+        now = datetime.now(timezone.utc)
+
+        # 0. v9.5: PHANTOM POSITION CLEANUP — detect unfilled GTC orders
+        # If bot has an OPEN position but the market has ended AND there's no
+        # matching position on Polymarket, the order never filled → remove it.
+        if s._poly_pos is not None:
+            poly_slugs = set()
+            for pp in (s._poly_pos or []):
+                ps = pp.get("slug") or pp.get("market", {}).get("slug", "")
+                if ps: poly_slugs.add(ps)
+            phantoms = []
+            for p in s.risk.positions:
+                if p.status != "OPEN": continue
+                if p.market_end and (now - p.market_end).total_seconds() > 120:
+                    # Market ended 2+ min ago — check if Polymarket knows about it
+                    if p.slug not in poly_slugs:
+                        phantoms.append(p)
+            for p in phantoms:
+                log.info(f"PHANTOM CLEANUP: {p.strat} {p.side} ${p.cost:.2f} on {p.slug} — order never filled")
+                s.dash.ev(f"Phantom removed: {p.strat} ${p.cost:.2f} (unfilled)")
+                p.status = "CANCELLED"
+                p.pnl = 0.0
+                # Return the risk
+                s.risk.open_risk = max(0, s.risk.open_risk - p.cost)
+
+        # 1. Remove resolved positions older than 30 min from memory
+        # (they're already logged to trade_history.txt and trade_data.json)
+        before = len(s.risk.positions)
+        s.risk.positions = [p for p in s.risk.positions
+                            if p.status == "OPEN" or
+                            (p.opened and (now - p.opened).total_seconds() < 1800)]
+        removed = before - len(s.risk.positions)
+
+        # 2. Trim trades list but preserve lifetime stats
+        # Trades are already recorded in sizer — this list is only for dashboard display
+        if len(s.risk.trades) > 200:
+            # Save lifetime W/L before trimming
+            s.risk._lifetime_wins = s.risk._lifetime_wins + sum(1 for t in s.risk.trades[:-200] if t.pnl > 0)
+            s.risk._lifetime_losses = s.risk._lifetime_losses + sum(1 for t in s.risk.trades[:-200] if t.pnl < 0)
+            s.risk.trades = s.risk.trades[-200:]
+
+        # 3. Clean stale confirmation entries
+        stale_keys = [k for k, v in s.confirm.pending.items()
+                      if time.time() - v["time"] > 30]
+        for k in stale_keys:
+            del s.confirm.pending[k]
+
+        # 4. Cap traded_cids at 50 (oldest ones probably already resolved)
+        if len(s._traded_cids) > 50:
+            cid_list = list(s._traded_cids)
+            s._traded_cids = set(cid_list[-50:])
+            s._save_traded_cids()
+
+        # 5. Trim _past_trades (dashboard display only)
+        if len(s._past_trades) > 100:
+            s._past_trades = s._past_trades[-100:]
+
+        # 6. Clean old _market_trades entries (markets that resolved long ago)
+        if hasattr(s.cortex, '_market_trades') and len(s.cortex._market_trades) > 20:
+            slugs = list(s.cortex._market_trades.keys())
+            for slug in slugs[:-20]:
+                del s.cortex._market_trades[slug]
+
+        # 7. Clean PairAccum tracker
+        if hasattr(s, 's6') and hasattr(s.s6, '_pairs') and len(s.s6._pairs) > 20:
+            keys = list(s.s6._pairs.keys())
+            for k in keys[:-20]:
+                del s.s6._pairs[k]
+
+        if removed > 0:
+            log.debug(f"Cleanup: removed {removed} old positions, {len(stale_keys)} stale confirms")
+
     def _trade(s, m):
         if not s.risk.ok(): return
         tl = (m.end - datetime.now(timezone.utc)).total_seconds()
@@ -4149,6 +4356,7 @@ class Bot:
 
         # v9.4: Asset/timeframe label for events
         slot_label = f"{m.asset.upper()}-{m.timeframe}m"
+        slot_key = f"{m.asset}-{m.timeframe}m"  # v9.5: for per-slot trust lookup
 
         # v9.1: Market Lifecycle snapshot at key minute marks
         market_minute = int((duration - tl) / 60)
@@ -4339,7 +4547,7 @@ class Bot:
             ok, reason, same_count = allowed("ARB", sig["side"], sig["price"])
             if ok:
                 sz = s.sizer.get_size("ARB", s.c.get_base_size("ARB", s.risk.show_bal), s.risk.show_bal, same_strat_count=same_count)
-                sz = sz * s.cortex.get_trust("ARB") * s.cortex.get_session_mult() * s.cortex.get_danger_mult()  # v9: Cortex
+                sz = sz * s.cortex.get_trust("ARB", slot_key=slot_key) * s.cortex.get_session_mult() * s.cortex.get_danger_mult()  # v9: Cortex
                 sz = min(sz, av, max_market_risk - market_risk, hard_max)
                 if sz >= 1.0:
                     s.strats["ARB"] = f"ACTIVE {sig['side']} pair=${sig['pair']:.4f}"
@@ -4377,7 +4585,7 @@ class Bot:
                         # v7: Apply conviction bonus, win streak, time-of-day
                         conv_bonus = s.conviction.get_bonus(m.slug, sig["dir"])
                         sz = sz * conv_bonus * streak_mult * tod_mult * market_penalty
-                        sz = sz * s.cortex.get_trust("LATENCY") * s.cortex.get_macro_mult(sig.get("dir", sig.get("side", "YES")), asset=m.asset) * s.cortex.get_session_mult() * s.cortex.get_danger_mult() * s.cortex.get_side_mult(sig["dir"]) * (lc_yes if sig["dir"] == "YES" else lc_no)  # v9: Cortex + Lifecycle
+                        sz = sz * s.cortex.get_trust("LATENCY", slot_key=slot_key) * s.cortex.get_macro_mult(sig.get("dir", sig.get("side", "YES")), asset=m.asset) * s.cortex.get_session_mult() * s.cortex.get_danger_mult() * s.cortex.get_side_mult(sig["dir"]) * (lc_yes if sig["dir"] == "YES" else lc_no)  # v9: Cortex + Lifecycle
                         sz = min(sz, av, max_market_risk - market_risk, hard_max)
                         if sz >= 1.0 and 0.08 <= p <= 0.88:
                             # No confirmation delay — latency edge IS speed
@@ -4423,7 +4631,7 @@ class Bot:
                         sz = sz * trend_mult
                         conv_bonus = s.conviction.get_bonus(m.slug, sig["dir"])
                         sz = sz * conv_bonus * streak_mult * tod_mult * market_penalty
-                        sz = sz * s.cortex.get_trust("MEANREV") * s.cortex.get_macro_mult(sig.get("dir", sig.get("side", "YES")), asset=m.asset) * s.cortex.get_session_mult() * s.cortex.get_danger_mult() * s.cortex.get_side_mult(sig["dir"]) * (lc_yes if sig["dir"] == "YES" else lc_no)  # v9: Cortex + Lifecycle
+                        sz = sz * s.cortex.get_trust("MEANREV", slot_key=slot_key) * s.cortex.get_macro_mult(sig.get("dir", sig.get("side", "YES")), asset=m.asset) * s.cortex.get_session_mult() * s.cortex.get_danger_mult() * s.cortex.get_side_mult(sig["dir"]) * (lc_yes if sig["dir"] == "YES" else lc_no)  # v9: Cortex + Lifecycle
                         sz = min(sz, av, max_market_risk - market_risk, hard_max)
                         if sz >= 1.0 and 0.10 <= p <= 0.35:
                             drop_pct = sig.get("drop", 0) * 100
@@ -4462,7 +4670,7 @@ class Bot:
                         sz = sz * trend_mult
                         conv_bonus = s.conviction.get_bonus(m.slug, sig["dir"])
                         sz = sz * conv_bonus * streak_mult * tod_mult * market_penalty
-                        sz = sz * s.cortex.get_trust("FLASH") * s.cortex.get_macro_mult(sig.get("dir", sig.get("side", "YES")), asset=m.asset) * s.cortex.get_session_mult() * s.cortex.get_danger_mult() * s.cortex.get_side_mult(sig["dir"]) * (lc_yes if sig["dir"] == "YES" else lc_no)  # v9: Cortex + Lifecycle
+                        sz = sz * s.cortex.get_trust("FLASH", slot_key=slot_key) * s.cortex.get_macro_mult(sig.get("dir", sig.get("side", "YES")), asset=m.asset) * s.cortex.get_session_mult() * s.cortex.get_danger_mult() * s.cortex.get_side_mult(sig["dir"]) * (lc_yes if sig["dir"] == "YES" else lc_no)  # v9: Cortex + Lifecycle
                         sz = min(sz, av, max_market_risk - market_risk, hard_max)
                         # v9.1: Flash hard cap $250 — data: $400-$570 Flash bets lost -$1,964 total
                         # Flash is a VALUE play, not a SIZE play. Keep bets small, let R:R do the work.
@@ -4503,7 +4711,7 @@ class Bot:
                         base = min(s.c.get_base_size("SQUEEZE", s.risk.show_bal), s.risk.show_bal * 0.03)
                         sz = s.sizer.get_size("SQUEEZE", base, s.risk.show_bal, same_strat_count=same_count)
                         sz = sz * market_penalty  # v8: reduce after first loss on this market
-                        sz = sz * s.cortex.get_trust("SQUEEZE") * s.cortex.get_macro_mult(sig.get("dir", sig.get("side", "YES")), asset=m.asset) * s.cortex.get_session_mult() * s.cortex.get_danger_mult() * s.cortex.get_side_mult(sig["dir"]) * (lc_yes if sig["dir"] == "YES" else lc_no)  # v9: Cortex + Lifecycle
+                        sz = sz * s.cortex.get_trust("SQUEEZE", slot_key=slot_key) * s.cortex.get_macro_mult(sig.get("dir", sig.get("side", "YES")), asset=m.asset) * s.cortex.get_session_mult() * s.cortex.get_danger_mult() * s.cortex.get_side_mult(sig["dir"]) * (lc_yes if sig["dir"] == "YES" else lc_no)  # v9: Cortex + Lifecycle
                         # v8.1: HARD CAP at 3% — lottery tickets stay small, no multiplier override
                         squeeze_cap = s.risk.show_bal * 0.03
                         sz = min(sz, av, max_market_risk - market_risk, hard_max, squeeze_cap)
@@ -4583,7 +4791,7 @@ class Bot:
                 s.strats["SPIKE"] = reason
             else:
                 base = s.c.get_base_size("SPIKE", s.risk.show_bal)
-                sz = base * s.cortex.get_trust("SPIKE") * s.cortex.get_session_mult() * s.cortex.get_danger_mult()
+                sz = base * s.cortex.get_trust("SPIKE", slot_key=slot_key) * s.cortex.get_session_mult() * s.cortex.get_danger_mult()
                 sz = min(sz, av, max_market_risk - market_risk, hard_max)
                 if sz >= 1.0:
                     s.strats["SPIKE"] = f"ACTIVE {sig['dir']} @ ${p:.2f} spike!"
