@@ -105,7 +105,7 @@ class Config:
     squeeze_enabled: bool = True
     squeeze_pct: float = 0.02     # 2% of balance — needs more data before bigger bets
     max_daily_loss: float = 9999.0   # Set via MAX_DAILY_LOSS env var
-    max_positions: int = 3
+    max_positions: int = 4
     poll_sec: int = 2
     assets: list = field(default_factory=lambda: ["btc"])
     # v9.4: Multi-asset slot definitions (asset, timeframe)
@@ -2153,142 +2153,179 @@ class S_Flash:
        the drop to slow down (second derivative turns positive).
     4. DIVERGENCE BONUS: Extra confidence when BTC and token disagree
     
-    Entry range: $0.08-$0.22 (3.5:1+ R:R)
-    Win rate target: 45%+ (up from 38% in v7)"""
+    Entry range: $0.15-$0.30 (data: entries >$0.35 = -$571)
+    Win rate target: 50%+ with direction-aware logic"""
     def __init__(s, c): s.c = c
     def check(s, m, f, trend, token_feed=None, book_intel=None):
         if not s.c.flash_enabled or f.n < 10: return None
-        # v9.4: Widened max from $0.30 to $0.35 for more volume
-        yes_cheap = 0.15 <= m.yes_p <= 0.35
-        no_cheap = 0.15 <= m.no_p <= 0.35
+        # v9.5: Tightened from $0.35 to $0.30. Data: >$0.35 entries = -$571 P&L
+        yes_cheap = 0.15 <= m.yes_p <= 0.30
+        no_cheap = 0.15 <= m.no_p <= 0.30
         if not yes_cheap and not no_cheap: return None
         tl = (m.end - datetime.now(timezone.utc)).total_seconds()
         duration = m.timeframe * 60  # 300 for 5m, 900 for 15m
-        # v9.4: Timeframe-aware cutoffs
+        # v9.5: Timeframe-aware cutoffs
         min_tl = 120 if m.timeframe == 5 else 240  # 2 min for 5m, 4 min for 15m
-        max_age = 180 if m.timeframe == 5 else 720  # wait 2m for 5m, 12m for 15m
         if tl < min_tl: return None
-        if tl > (duration - max_age + duration): pass  # allow from start
         market_age = duration - tl
         if market_age < (60 if m.timeframe == 5 else 120): return None  # wait 1m/2m into market
 
         regime = trend.regime if trend else ""
-        strong_up = regime in ("TRENDING_UP",) or (regime == "BREAKOUT" and trend.trend_dir > 0)
-        strong_down = regime in ("TRENDING_DOWN",) or (regime == "BREAKOUT" and trend.trend_dir < 0)
 
-        # v9.4 FIX: Removed TRENDING_DOWN hard block. It was blocking ALL trades
-        # because when trend is down, NO is always expensive ($0.70+) and YES was blocked.
-        # Result: 0 trades for hours. v8.1 didn't have this block and was profitable.
-        # The confirmation logic (btc direction, book, velocity) already prevents
-        # bad counter-trend entries — we don't need a regime hard block too.
-
-        # v9.4: Volatility gate removed. High volatility = big moves = cheap tokens.
-        # The confirmation logic (btc, book, velocity) already filters bad entries.
-
-        # v9.4: RULE 5 — Check NO side FIRST. Data: Down +$3,936, Up +$75
-        # BTC drops faster than it rises → NO side wins more often
-
-        btc_2m = f.chg(120)
-
-        # NO cheap → BTC pumped then fading → buy NO
-        if no_cheap and not strong_up:
-            book_confirms = True
-            if book_intel and book_intel.no_ask_depth > 0:
-                if book_intel.selling_pressure("NO"):
-                    book_confirms = False
-
-            vel_confirms = True
-            if token_feed and token_feed.n >= 5:
-                vel = token_feed.token_velocity("NO", 20)
-                if vel < -0.005:
-                    vel_confirms = False
-
-            # v9.4 FIX: Match v8.1 permissiveness — OR logic, not AND
-            # v8.1: pulling_back = f.chg(30) < 0 OR (flat_enough AND trend_dir <= 0)
-            pulling_back = f.chg(30) < 0
-            flat_enough = btc_2m < 0.02
-            btc_confirms = pulling_back or (flat_enough and trend.trend_dir <= 0)
-
-            confirms = sum([btc_confirms, book_confirms, vel_confirms])
-            if confirms >= 2:
-                return {"s": "FLASH", "dir": "NO", "yes": False, "price": m.no_p, "sz": 0}
-
-        # YES cheap → BTC dropped then recovering → buy YES
-        if yes_cheap and not strong_down:
+        # v9.5: BTC direction is the PRIMARY signal.
+        # Data: YES trades +$767 (5W/1L), NO trades -$1,580 (4W/13L)
+        # Flash was buying NO in uptrends because confirmations were bugged.
+        # NEW RULE: Only buy the side that AGREES with BTC direction.
+        btc_2m = f.chg(120)    # 2-minute change
+        btc_30s = f.chg(30)    # 30-second change
+        btc_5m = f.chg(300)    # 5-minute change (if available)
+        
+        # Determine BTC direction with confidence
+        btc_going_up = btc_2m > 0.0002 and btc_30s >= 0     # up 0.02%+ over 2m, not reversing
+        btc_going_down = btc_2m < -0.0002 and btc_30s <= 0  # down 0.02%+ over 2m, not reversing
+        
+        # v9.5: RULE 1 — Only buy YES if BTC is going UP
+        # Only buy NO if BTC is going DOWN
+        # This prevents buying the "cheap" side that's cheap because it's LOSING
+        
+        if yes_cheap and btc_going_down:
+            # YES is cheap AND BTC is falling → this is a dip buy
+            # BTC dropped, YES got cheap, we buy expecting bounce
+            # Extra confirmation: 30s shows slight recovery starting
+            bouncing = btc_30s > -0.0001  # at least not accelerating down
+            
             book_confirms = True
             if book_intel and book_intel.yes_ask_depth > 0:
                 if book_intel.selling_pressure("YES"):
                     book_confirms = False
 
-            vel_confirms = True
-            if token_feed and token_feed.n >= 5:
-                vel = token_feed.token_velocity("YES", 20)
-                if vel < -0.005:
-                    vel_confirms = False
-
-            # v9.4 FIX: Match v8.1 permissiveness — OR logic, not AND
-            recovering = f.chg(30) > 0
-            flat_enough = btc_2m > -0.02
-            btc_confirms = recovering or (flat_enough and trend.trend_dir >= 0)
-
-            confirms = sum([btc_confirms, book_confirms, vel_confirms])
-            if confirms >= 2:
+            if bouncing or book_confirms:
                 return {"s": "FLASH", "dir": "YES", "yes": True, "price": m.yes_p, "sz": 0}
+
+        if no_cheap and btc_going_up:
+            # NO is cheap AND BTC is rising → this is a dip buy on NO side
+            # BTC pumped, NO got cheap, we buy expecting pullback
+            # Extra confirmation: 30s shows slight pullback starting
+            pulling_back = btc_30s < 0.0001  # at least not accelerating up
+            
+            book_confirms = True
+            if book_intel and book_intel.no_ask_depth > 0:
+                if book_intel.selling_pressure("NO"):
+                    book_confirms = False
+
+            if pulling_back or book_confirms:
+                return {"s": "FLASH", "dir": "NO", "yes": False, "price": m.no_p, "sz": 0}
+
+        # v9.5: RULE 2 — In flat/choppy markets, buy whichever side is cheapest
+        # but require stronger confirmation (book + velocity must agree)
+        if not btc_going_up and not btc_going_down:
+            # Market is flat — buy the cheapest side with strong confirmation
+            target_side = None
+            if yes_cheap and no_cheap:
+                target_side = "YES" if m.yes_p < m.no_p else "NO"
+            elif yes_cheap:
+                target_side = "YES"
+            elif no_cheap:
+                target_side = "NO"
+            
+            if target_side:
+                is_yes = target_side == "YES"
+                book_ok = True
+                if book_intel:
+                    side_label = "YES" if is_yes else "NO"
+                    depth = book_intel.yes_ask_depth if is_yes else book_intel.no_ask_depth
+                    if depth > 0 and book_intel.selling_pressure(side_label):
+                        book_ok = False
+                
+                vel_ok = True
+                if token_feed and token_feed.n >= 5:
+                    vel = token_feed.token_velocity(target_side, 20)
+                    if vel < -0.005:
+                        vel_ok = False
+                
+                # Both must confirm in flat market (stricter)
+                if book_ok and vel_ok:
+                    price = m.yes_p if is_yes else m.no_p
+                    return {"s": "FLASH", "dir": target_side, "yes": is_yes, "price": price, "sz": 0}
 
         return None
 
 
 class S_Squeeze:
-    """LATE GAME — Lottery tickets in the final minutes.
-    Research: 15-min markets get volatile near expiry. One side drops
-    to $0.05-$0.15 but can spike if BTC reverses last-second.
-    Risk $1-2 for potential $5-8 return. Win rate ~15-20% but R:R is 5:1+.
+    """LATE GAME — Two modes:
     
-    Rules:
-    - Only in last 5 minutes (< 300s), not last 60s (too late)
-    - Side must be ≤ $0.15 (6:1+ risk/reward)
-    - BTC must show ANY sign of turning (30s change in our direction)
-    - Small size: 2-3% of balance — it's a lottery ticket
-    - 45s cooldown between signals"""
+    Mode 1: LOTTERY (original) — Buy cheap losing side in final minutes.
+    Tokens at $0.12-$0.22 that could spike on reversal. 15-20% WR, 5:1 R:R.
+    
+    Mode 2: SNIPE (new, 5m only) — Buy winning side in final 45 seconds.
+    At T-30s, BTC direction is ~85% determined. Buy the winning side at
+    $0.82-$0.94 as MAKER ORDER (zero fees + rebate). Nearly certain win,
+    small profit per trade ($0.06-$0.18/share), but very high win rate.
+    
+    The snipe exploits the fact that Polymarket odds lag behind BTC price
+    in the final seconds of 5-minute markets."""
     def __init__(s, c):
         s.c = c
         s.was_squeezing = False
         s.squeeze_count = 0
         s._last_signal_time = 0
+        s._last_snipe_time = 0
 
     def check(s, m, f, trend):
         if f.n < 10: return None
         tl = (m.end - datetime.now(timezone.utc)).total_seconds()
         duration = m.timeframe * 60
-        # v9.4: Timeframe-aware squeeze window
-        squeeze_start = 120 if m.timeframe == 5 else 300  # last 2m for 5m, last 5m for 15m
+
+        # ── MODE 2: SNIPE (5m markets, final 45 seconds) ──
+        if m.timeframe == 5 and 8 <= tl <= 45:
+            # Cooldown: one snipe per market
+            if time.time() - s._last_snipe_time < 60: return None
+            
+            # Need strong BTC direction signal
+            chg_2m = f.chg(120)   # 2-minute price change
+            chg_30s = f.chg(30)   # 30-second price change
+            
+            # BTC clearly going UP: both 2m and 30s positive, 2m > 0.03%
+            if chg_2m > 0.0003 and chg_30s > 0:
+                # YES is winning side — buy it if price is $0.82-$0.94
+                if 0.82 <= m.yes_p <= 0.94:
+                    s._last_snipe_time = time.time()
+                    return {"s": "SQUEEZE", "dir": "YES", "yes": True,
+                            "price": m.yes_p, "adx": 0, "di_plus": 0, "di_minus": 0,
+                            "mom_value": chg_2m, "squeeze_count": int(tl),
+                            "fired": True, "sz": 0, "mode": "SNIPE"}
+            
+            # BTC clearly going DOWN: both 2m and 30s negative, 2m < -0.03%
+            if chg_2m < -0.0003 and chg_30s < 0:
+                # NO is winning side — buy it if price is $0.82-$0.94
+                if 0.82 <= m.no_p <= 0.94:
+                    s._last_snipe_time = time.time()
+                    return {"s": "SQUEEZE", "dir": "NO", "yes": False,
+                            "price": m.no_p, "adx": 0, "di_plus": 0, "di_minus": 0,
+                            "mom_value": chg_2m, "squeeze_count": int(tl),
+                            "fired": True, "sz": 0, "mode": "SNIPE"}
+
+        # ── MODE 1: LOTTERY (original — cheap side in final minutes) ──
+        squeeze_start = 120 if m.timeframe == 5 else 300
         squeeze_end = 30 if m.timeframe == 5 else 60
 
-        # Update squeeze count for dashboard display
         if tl <= squeeze_start and tl > squeeze_end:
             s.squeeze_count = int(squeeze_start - tl)
         else:
             s.squeeze_count = 0
 
-        # Only in squeeze window
         if tl > squeeze_start or tl < squeeze_end: return None
 
-        yes_cheap = 0.12 <= m.yes_p <= 0.22  # v9.4: raised from 0.08
+        yes_cheap = 0.12 <= m.yes_p <= 0.22
         no_cheap = 0.12 <= m.no_p <= 0.22
         if not yes_cheap and not no_cheap: return None
 
-        # 45-second cooldown
         if time.time() - s._last_signal_time < 45: return None
 
-        # v6.2 FIX: Don't buy against strong regime
         regime = trend.regime if trend else ""
         strong_up = regime in ("TRENDING_UP",) or (regime == "BREAKOUT" and trend.trend_dir > 0)
         strong_down = regime in ("TRENDING_DOWN",) or (regime == "BREAKOUT" and trend.trend_dir < 0)
 
-        # v9.4: Removed TRENDING_DOWN hard block. The 'not strong_down' check
-        # already prevents counter-trend entries. Having both = nothing trades.
-
-        # YES very cheap → buy if BTC turning up (and not strong downtrend)
         if yes_cheap and not strong_down:
             turning_up = f.chg(30) > 0.0003
             if turning_up:
@@ -2296,9 +2333,8 @@ class S_Squeeze:
                 return {"s": "SQUEEZE", "dir": "YES", "yes": True,
                         "price": m.yes_p, "adx": 0, "di_plus": 0, "di_minus": 0,
                         "mom_value": f.chg(30), "squeeze_count": s.squeeze_count,
-                        "fired": True, "sz": 0}
+                        "fired": True, "sz": 0, "mode": "LOTTERY"}
 
-        # NO very cheap → buy if BTC turning down (and not strong uptrend)
         if no_cheap and not strong_up:
             turning_down = f.chg(30) < -0.0003
             if turning_down:
@@ -2306,7 +2342,7 @@ class S_Squeeze:
                 return {"s": "SQUEEZE", "dir": "NO", "yes": False,
                         "price": m.no_p, "adx": 0, "di_plus": 0, "di_minus": 0,
                         "mom_value": f.chg(30), "squeeze_count": s.squeeze_count,
-                        "fired": True, "sz": 0}
+                        "fired": True, "sz": 0, "mode": "LOTTERY"}
 
         return None
 
@@ -4884,7 +4920,7 @@ class Bot:
         # ── S3: MEAN REVERSION (v8: replaces dead Momentum — buys the bounce) ──
         # v8.1: Don't fire if Latency has an open position (protect the crown jewel)
         latency_open = any(p.strat == "LATENCY" and p.status == "OPEN" for p in open_here)
-        lat_isolate = time.time() - s.cd.get(f"lat_iso:{slot_key}", 0) < 60
+        lat_isolate = time.time() - s.cd.get(f"lat_iso:{slot_key}", 0) < 20  # v9.5: was 60s, too long for 5m markets
         sig = None if s.cortex.is_disabled("MEANREV") else s.s3.check(m, s.feed, s.trend, s.token_feed, s.book_intel)
         if s.cortex.is_disabled("MEANREV"): s.strats["MEANREV"] = "☠ disabled"
         if sig and mom_ok and not latency_open and not lat_isolate and time.time() - s.cd.get(f"mrev:{slot_key}", 0) > 20 and not s.sizer.is_paused("MEANREV") and not bad_hour:
@@ -4928,7 +4964,7 @@ class Bot:
 
         # ── S4: FLASH (v8: order book aware + volatility gated) ──
         sig = s.s4.check(m, s.feed, s.trend, s.token_feed, s.book_intel)
-        if sig and flash_ok and not lat_isolate and time.time() - s.cd.get(f"flash:{slot_key}", 0) > 60 and not s.sizer.is_paused("FLASH") and not bad_hour:
+        if sig and flash_ok and not lat_isolate and time.time() - s.cd.get(f"flash:{slot_key}", 0) > 30 and not s.sizer.is_paused("FLASH") and not bad_hour:
             p = sig["price"]
             if s.momentum_guard.should_block(sig["yes"]):
                 s.strats["FLASH"] = f"momentum guard"
@@ -4971,25 +5007,50 @@ class Bot:
         elif not bad_hour:
             s.strats["FLASH"] = f"lo=${min(m.yes_p, m.no_p):.4f}"
 
-        # ── S5: SQUEEZE → LATE GAME (lottery tickets in final minutes) ──
+        # ── S5: SQUEEZE → LATE GAME (lottery + snipe) ──
         if s.c.squeeze_enabled:
             sig = s.s5.check(m, s.feed, s.trend)
             if sig and not s.sizer.is_paused("SQUEEZE"):
                 p = sig["price"]
-                ok, reason, same_count = allowed("SQUEEZE", sig["dir"], p)
-                if not ok:
-                    s.strats["SQUEEZE"] = reason
+                mode = sig.get("mode", "LOTTERY")
+                
+                if mode == "SNIPE" and m.timeframe == 5:
+                    # SNIPE MODE: Buy winning side at $0.82-0.94, maker only
+                    # Skip allowed() checks — snipe has its own rules
+                    # Don't check counter-trend — we're buying WITH the trend
+                    snipe_size = min(s.risk.show_bal * 0.04, 100, av)  # 4% or $100 max
+                    if s.risk.show_bal < s.c.recovery_target:
+                        snipe_size = min(snipe_size, 50)  # $50 max in recovery
+                    if snipe_size >= 1.0 and 0.82 <= p <= 0.94:
+                        # Profit per share: $1.00 - price = $0.06-$0.18
+                        profit_per = 1.0 - p
+                        sh = max(snipe_size / p, 2.0)
+                        if sh * p > av: sh = av / p
+                        s.strats["SQUEEZE"] = f"SNIPE {sig['dir']} ${p:.2f} {sig['squeeze_count']}s"
+                        s.dash.ev(f"[{slot_label}·SNIPE] {sig['dir']} ${snipe_size:.2f} @{p:.2f} +${profit_per:.2f}/sh")
+                        # MAKER ONLY — zero fees + rebate
+                        oid, actual_shares = s.ex.order(m, sig["yes"], p, sh, mode="maker")
+                        if oid:
+                            t = Trd(datetime.now(timezone.utc), "SQUEEZE", m.slug, sig["dir"], p, snipe_size, oid=oid)
+                            s.risk.open(t, market_end=m.end, actual_shares=actual_shares, entry_regime=s.trend.regime if s.trend else "UNKNOWN"); s.cd[f"sqz:{slot_key}"] = time.time()
+                            s._recent_entries.append((time.time(), t.side, slot_key))
+                            if m.cid: s._traded_cids.add(m.cid); s._save_traded_cids()
+                            s._beep()
                 else:
-                    # Late game doesn't need trend check — it's a lottery ticket
-                    if not s.sizer.is_side_cold(sig["dir"]):
-                        # Small size: 2-3% of balance for lottery tickets
+                    # LOTTERY MODE: Original cheap-side logic
+                    ok, reason, same_count = allowed("SQUEEZE", sig["dir"], p)
+                    if not ok:
+                        s.strats["SQUEEZE"] = reason
+                    elif s.sizer.is_side_cold(sig["dir"]):
+                        s.strats["SQUEEZE"] = f"side cold"
+                    else:
                         base = min(s.c.get_base_size("SQUEEZE", s.risk.show_bal), s.risk.show_bal * 0.03)
                         sz = s.sizer.get_size("SQUEEZE", base, s.risk.show_bal, same_strat_count=same_count)
-                        sz = sz * market_penalty  # v8: reduce after first loss on this market
-                        sz = sz * s.cortex.get_trust("SQUEEZE", slot_key=slot_key) * s.cortex.get_macro_mult(sig.get("dir", sig.get("side", "YES")), asset=m.asset) * s.cortex.get_session_mult() * s.cortex.get_danger_mult() * s.cortex.get_side_mult(sig["dir"]) * (lc_yes if sig["dir"] == "YES" else lc_no)  # v9: Cortex + Lifecycle
-                        # v8.1: HARD CAP at 3% — lottery tickets stay small, no multiplier override
+                        sz = sz * market_penalty
+                        sz = sz * s.cortex.get_trust("SQUEEZE", slot_key=slot_key) * s.cortex.get_macro_mult(sig.get("dir", sig.get("side", "YES")), asset=m.asset) * s.cortex.get_session_mult() * s.cortex.get_danger_mult() * s.cortex.get_side_mult(sig["dir"]) * (lc_yes if sig["dir"] == "YES" else lc_no)
                         squeeze_cap = s.risk.show_bal * 0.03
                         sz = min(sz, av, max_market_risk - market_risk, hard_max, squeeze_cap)
+                        sz = sz * _counter_trend_mult  # v9.5: reduce in counter-trend
                         if sz >= 0.50 and p <= 0.22:
                             tl_left = sig["squeeze_count"]
                             s.strats["SQUEEZE"] = f"LOTTERY {sig['dir']} ${p:.2f} {tl_left}s left"
@@ -5005,11 +5066,11 @@ class Bot:
                                 s.conviction.record_signal(m.slug, "SQUEEZE", sig["dir"])
                                 s._beep()
                         else: s.strats["SQUEEZE"] = f"signal {sig['dir']} p=${p:.2f}"
-                    else:
-                        s.strats["SQUEEZE"] = f"side cold"
             else:
                 tl_now = (m.end - datetime.now(timezone.utc)).total_seconds() if m.end else 999
-                if tl_now <= 300:
+                if m.timeframe == 5 and tl_now <= 45:
+                    s.strats["SQUEEZE"] = f"snipe zone ({int(tl_now)}s)"
+                elif tl_now <= 300:
                     s.strats["SQUEEZE"] = f"watching ({int(tl_now)}s left)"
                 else:
                     s.strats["SQUEEZE"] = f"waiting (<5min)"
