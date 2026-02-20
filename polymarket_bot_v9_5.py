@@ -3645,6 +3645,9 @@ class Bot:
         s.s1 = S_Arb(s.c); s.s2 = S_Latency(s.c); s.s3 = S_MeanReversion(s.c); s.s4 = S_Flash(s.c); s.s5 = S_Squeeze(s.c); s.s6 = S_PairAccum(s.c); s.s7 = S_Spike(s.c)
         s.mkt = None; s.strats = {"ARB": "...", "LATENCY": "...", "MEANREV": "...", "FLASH": "...", "SQUEEZE": "...", "PAIR": "...", "SPIKE": "..."}
         s.cd = {}; s._traded_cids = set()
+        # v9.5: Cross-slot direction limiter — prevents correlated losses
+        # Tracks recent entries: [(timestamp, side, slot_key), ...]
+        s._recent_entries = []
         s.start_time = time.time()
         s._logged_positions = set()
         s._past_trades = []
@@ -4641,6 +4644,16 @@ class Bot:
         can_same_stack = (tl >= 300 and
                           s.trend.regime in ("TRENDING_UP", "TRENDING_DOWN", "BREAKOUT"))
 
+        # ── v9.5: CROSS-SLOT DIRECTION LIMITER ──
+        # Crypto assets are 80%+ correlated. Buying NO on BTC, ETH, SOL, XRP
+        # simultaneously is really 1 bet copied 4 times. Limit to 2 same-direction
+        # entries within 90 seconds across all slots.
+        now_ts = time.time()
+        s._recent_entries = [(t, side, sk) for t, side, sk in s._recent_entries if now_ts - t < 90]
+        def _cross_slot_ok(side):
+            same_dir = sum(1 for t, sd, sk in s._recent_entries if sd == side and sk != slot_key)
+            return same_dir < 2  # max 2 other slots in same direction within 90s
+
         # ── SPREAD CHECK ──
         spread = s.ex.check_spread(m.tok_yes)
         if spread is not None and spread > 0.08:
@@ -4712,6 +4725,10 @@ class Bot:
             Different strategy joining = always allowed at full size (same_strat_count=0).
             Same strategy stacking = diminishing size, needs cheaper price + trend."""
 
+            # v9.5: Cross-slot direction limiter — prevent correlated bets
+            if strat not in ("ARB", "PAIR") and not _cross_slot_ok(side):
+                return False, f"cross-slot limit (2 {side} already)", 0
+
             # v7.1: HARD counter-trend block — data shows 0% win rate on these combos
             # TRENDING_UP + NO = 0W/5L. TRENDING_DOWN + YES = 0W/1L. No exceptions.
             # v9.4: PAIR exempt — it deliberately buys the opposite side to lock in profit.
@@ -4777,6 +4794,7 @@ class Bot:
                     if oid:
                         t = Trd(datetime.now(timezone.utc), "ARB", m.slug, sig["side"], sig["price"], sz, oid=oid)
                         s.risk.open(t, market_end=m.end, actual_shares=actual_shares, entry_regime=s.trend.regime if s.trend else "UNKNOWN")
+                        s._recent_entries.append((time.time(), t.side, slot_key))
                         if m.cid: s._traded_cids.add(m.cid); s._save_traded_cids()
                         s._beep()
                     # Don't return — let other strategies also check this tick
@@ -4818,6 +4836,7 @@ class Bot:
                             if oid:
                                 t = Trd(datetime.now(timezone.utc), "LATENCY", m.slug, sig["dir"], p, sz, oid=oid)
                                 s.risk.open(t, market_end=m.end, actual_shares=actual_shares, entry_regime=s.trend.regime if s.trend else "UNKNOWN"); s.cd[f"lat:{slot_key}"] = time.time()
+                                s._recent_entries.append((time.time(), t.side, slot_key))
                                 if m.cid: s._traded_cids.add(m.cid); s._save_traded_cids()
                                 # v7: Record conviction
                                 s.conviction.record_signal(m.slug, "LATENCY", sig["dir"])
@@ -4863,6 +4882,7 @@ class Bot:
                             if oid:
                                 t = Trd(datetime.now(timezone.utc), "MEANREV", m.slug, sig["dir"], p, sz, oid=oid)
                                 s.risk.open(t, market_end=m.end, actual_shares=actual_shares, entry_regime=s.trend.regime if s.trend else "UNKNOWN"); s.cd[f"mrev:{slot_key}"] = time.time()
+                                s._recent_entries.append((time.time(), t.side, slot_key))
                                 if m.cid: s._traded_cids.add(m.cid); s._save_traded_cids()
                                 s.conviction.record_signal(m.slug, "MEANREV", sig["dir"])
                                 s._beep()
@@ -4905,6 +4925,7 @@ class Bot:
                             if oid:
                                 t = Trd(datetime.now(timezone.utc), "FLASH", m.slug, sig["dir"], p, sz, oid=oid)
                                 s.risk.open(t, market_end=m.end, actual_shares=actual_shares, entry_regime=s.trend.regime if s.trend else "UNKNOWN"); s.cd[f"flash:{slot_key}"] = time.time()
+                                s._recent_entries.append((time.time(), t.side, slot_key))
                                 if m.cid: s._traded_cids.add(m.cid); s._save_traded_cids()
                                 s.conviction.record_signal(m.slug, "FLASH", sig["dir"])
                                 s._beep()
@@ -4945,6 +4966,7 @@ class Bot:
                             if oid:
                                 t = Trd(datetime.now(timezone.utc), "SQUEEZE", m.slug, sig["dir"], p, sz, oid=oid)
                                 s.risk.open(t, market_end=m.end, actual_shares=actual_shares, entry_regime=s.trend.regime if s.trend else "UNKNOWN"); s.cd[f"sqz:{slot_key}"] = time.time()
+                                s._recent_entries.append((time.time(), t.side, slot_key))
                                 if m.cid: s._traded_cids.add(m.cid); s._save_traded_cids()
                                 s.conviction.record_signal(m.slug, "SQUEEZE", sig["dir"])
                                 s._beep()
@@ -4982,6 +5004,7 @@ class Bot:
                     if oid:
                         t = Trd(datetime.now(timezone.utc), "PAIR", m.slug, sig["dir"], p, sz, oid=oid)
                         s.risk.open(t, market_end=m.end, actual_shares=actual_shares, entry_regime=s.trend.regime if s.trend else "UNKNOWN")
+                        s._recent_entries.append((time.time(), t.side, slot_key))
                         # Update pair tracker
                         s.s6.update_pair(m.slug, sig["dir"], actual_shares or sh, sz)
                         if m.cid: s._traded_cids.add(m.cid); s._save_traded_cids()
@@ -5022,6 +5045,7 @@ class Bot:
                     if oid:
                         t = Trd(datetime.now(timezone.utc), "SPIKE", m.slug, sig["dir"], p, sz, oid=oid)
                         s.risk.open(t, market_end=m.end, actual_shares=actual_shares, entry_regime=s.trend.regime if s.trend else "UNKNOWN")
+                        s._recent_entries.append((time.time(), t.side, slot_key))
                         if m.cid: s._traded_cids.add(m.cid); s._save_traded_cids()
                         s._beep()
                 else:
