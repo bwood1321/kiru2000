@@ -3240,7 +3240,9 @@ class Dash:
     def render(s, c, conn, f, risk, mkt, strats, scores, orders, poly_pos,
                start_time=None, past_trades=None, trend=None, sizer=None,
                cortex=None, poly_ws=None, slot_markets=None, feeds=None, active_slot=""):
-        os.system("cls" if os.name == "nt" else "clear")
+        # v9.5: Use ANSI escape to move cursor home instead of clearing screen
+        # This preserves scroll buffer so user can scroll up to see history
+        print("\033[H\033[J", end="")
         now = datetime.now().strftime("%H:%M:%S")
         rt = ""
         if start_time:
