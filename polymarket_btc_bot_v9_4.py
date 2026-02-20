@@ -1415,6 +1415,11 @@ class Cortex:
             trust = 0.0
 
         s._trust[strat] = round(max(0.0, min(2.5, trust)), 2)
+        # v9.4: Floor at 0.40 ALWAYS — not just at startup
+        # Flash went to 0.10x during live trading = $26 bets = useless
+        # At 30% WR, losing streaks are NORMAL. Don't crush strategies for it.
+        if strat not in ("LATENCY", "SQUEEZE") and s._trust[strat] < 0.40 and s._trust[strat] > 0.0:
+            s._trust[strat] = 0.40
 
     def _discover_patterns(s):
         """Scan trade history for patterns nobody programmed.
@@ -1847,10 +1852,9 @@ class S_Latency:
         min_chg = 0.0007 if (trend and trend.regime == "BREAKOUT") else 0.0010
         if abs(chg) < min_chg: return None
 
-        # v9.1: HARD BLOCK in FLAT — data: 0W/2L, -$1,386
-        # Latency needs a strong directional move. FLAT = no edge = gambling.
-        if trend and trend.regime == "FLAT":
-            return None
+        # v9.4: Removed FLAT block. v8.1 didn't have it. 0W/2L is only 2 trades —
+        # too small to justify blocking. The 0.10% BTC move requirement already
+        # ensures there's a real directional move happening.
 
         up = chg > 0
         # The side we want: BTC up → buy YES (if cheap), BTC down → buy NO (if cheap)
@@ -2012,12 +2016,11 @@ class S_Flash:
         strong_up = regime in ("TRENDING_UP",) or (regime == "BREAKOUT" and trend.trend_dir > 0)
         strong_down = regime in ("TRENDING_DOWN",) or (regime == "BREAKOUT" and trend.trend_dir < 0)
 
-        # v9.1: HARD BLOCK Flash counter-trend in TRENDING_DOWN — data: 3W/8L, -$1,486
-        # v9.4: But ALLOW with-trend flash (buying NO in downtrend when it dips)
-        if regime == "TRENDING_DOWN":
-            # Only allow NO side (with-trend). YES is counter-trend = blocked.
-            if not no_cheap:
-                return None
+        # v9.4 FIX: Removed TRENDING_DOWN hard block. It was blocking ALL trades
+        # because when trend is down, NO is always expensive ($0.70+) and YES was blocked.
+        # Result: 0 trades for hours. v8.1 didn't have this block and was profitable.
+        # The confirmation logic (btc direction, book, velocity) already prevents
+        # bad counter-trend entries — we don't need a regime hard block too.
 
         # v9.4: Volatility gate removed. High volatility = big moves = cheap tokens.
         # The confirmation logic (btc, book, velocity) already filters bad entries.
@@ -2118,12 +2121,8 @@ class S_Squeeze:
         strong_up = regime in ("TRENDING_UP",) or (regime == "BREAKOUT" and trend.trend_dir > 0)
         strong_down = regime in ("TRENDING_DOWN",) or (regime == "BREAKOUT" and trend.trend_dir < 0)
 
-        # v9.1: HARD BLOCK counter-trend Squeeze in TRENDING_DOWN — data: 1W/5L, -$832
-        # v9.4: Allow WITH-TREND squeeze (cheap NO in downtrend = BTC keeps falling)
-        if regime == "TRENDING_DOWN":
-            # Only allow NO side. YES (hoping BTC reverses in last 5 min) is blocked.
-            if not no_cheap:
-                return None
+        # v9.4: Removed TRENDING_DOWN hard block. The 'not strong_down' check
+        # already prevents counter-trend entries. Having both = nothing trades.
 
         # YES very cheap → buy if BTC turning up (and not strong downtrend)
         if yes_cheap and not strong_down:
@@ -4031,12 +4030,9 @@ class Bot:
                 if s.trend.regime == "TRENDING_DOWN" and side == "YES":
                     return False, "hard block: YES in TRENDING_DOWN", 0
                 
-                # v9.1: 5-MINUTE TREND HARD BLOCK
-                btc_5m = s.feed.chg(300)
-                if btc_5m < -0.0010 and side == "YES":
-                    return False, "hard block: YES while 5m down", 0
-                if btc_5m > 0.0010 and side == "NO":
-                    return False, "hard block: NO while 5m up", 0
+                # v9.4: Removed v9.1 5-minute trend block — v8.1 didn't have this
+                # and the regime block + fast trend block already cover it.
+                # Having 3 layers of the same block = nothing ever trades.
 
                 # v8.1: FAST TREND — catches moves before regime engine classifies them
                 if fast_trend_up and side == "NO":
