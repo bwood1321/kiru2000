@@ -84,7 +84,7 @@ class Config:
     squeeze_enabled: bool = True
     squeeze_pct: float = 0.05     # 5% of balance
     max_daily_loss: float = 9999.0   # Set via MAX_DAILY_LOSS env var
-    max_positions: int = 7
+    max_positions: int = 3
     poll_sec: int = 2
     assets: list = field(default_factory=lambda: ["btc"])
     # v6: Adaptive settings
@@ -1566,15 +1566,15 @@ class Cortex:
         return s._session_mult
 
     def get_danger_mult(s):
-        """Danger zone reduction. 0.7 in danger, 1.0 otherwise."""
-        return 0.7 if s._in_danger else 1.0
+        """Danger zone reduction. Disabled in v9.3 — not enough data to justify blocking."""
+        return 1.0
 
     def get_max_entry(s, strat):
         """Tighter entry requirements for low-trust strategies.
         GRINDER exempt: it enters at $0.82-$0.92 by design, trust can't change that."""
         if strat == "GRINDER": return 0.92  # Grinder always needs high entry
         trust = s._trust.get(strat, 1.0)
-        defaults = {"ARB": 0.38, "LATENCY": 0.25, "MEANREV": 0.22, "FLASH": 0.22, "SQUEEZE": 0.20}
+        defaults = {"ARB": 0.50, "LATENCY": 0.50, "MEANREV": 0.40, "FLASH": 0.50, "SQUEEZE": 0.40, "GRINDER": 0.50}
         base = defaults.get(strat, 0.25)
         if trust < 0.5:
             return base * 0.75  # tighten by 25% for untrusted
@@ -1840,22 +1840,10 @@ class S_Latency:
 
         # CRITICAL: Only enter when price is reasonable
         # Below $0.12: market is 88%+ confident the other side wins — don't fight it
-        # v9.2: Expanded from $0.25 to $0.35 — data shows 0.20-0.40 range has 34% WR
-        # which is profitable because avg win is 3.5x avg loss. $0.35 max, R:R is 1.8:1.
-        max_price = 0.35
-        
-        # v9.2: TREND RIDER MODE — when BTC confirms direction, buy the winning side
-        # even at higher prices. This is what the $438K bot does.
-        # Tier 1: 0.10%+ move with trend → up to $0.60
-        # Tier 2: 0.15%+ move with trend → up to $0.80 (covers typical downtrend NO $0.70-0.80)
-        # Tier 3: 0.25%+ move with strong trend → up to $0.88 (near-certain outcomes)
-        if trend and ((up and trend.trend_dir > 0) or (not up and trend.trend_dir < 0)):
-            if abs(chg) >= 0.0025 and abs(trend.trend_strength) > 0.25:
-                max_price = 0.88  # strong confirmed trend — near-certain
-            elif abs(chg) >= 0.0015:
-                max_price = 0.80  # confirmed trend — covers typical downtrend NO
-            elif abs(chg) >= 0.0010:
-                max_price = 0.60  # basic trend confirmation
+        # v9.3: Back to v8.1 pricing — data proves expensive entries lose money
+        # $0.15-$0.30 range: 30% WR, +$7,016 profit
+        # $0.50-$0.70 range: 50% WR, -$2,309 loss
+        max_price = 0.40
         
         if target_price > max_price or target_price < 0.12: return None
 
@@ -1867,25 +1855,12 @@ class S_Latency:
         confidence = min(0.95, 0.60 + abs(chg) * 100)
 
         # Trend bonus
-        if (up and trend.trend_dir > 0) or (not up and trend.trend_dir < 0):
+        if trend and ((up and trend.trend_dir > 0) or (not up and trend.trend_dir < 0)):
             confidence = min(0.95, confidence + 0.05)
-            # v9.2: Extra bonus for strong trend confirmation
-            if abs(trend.trend_strength) > 0.30:
-                confidence = min(0.95, confidence + 0.05)
 
         # Need edge to overcome fees + variance
-        # v9.2: Tiered edge requirements based on price range
-        # High prices = buying near-certain outcomes = less edge needed
-        if target_price > 0.65:
-            min_edge = 0.03  # at $0.75, need conf > 0.78 — very achievable with confirmed trend
-        elif target_price > 0.45:
-            min_edge = 0.06  # mid-range
-        elif target_price > 0.35:
-            min_edge = 0.10
-        else:
-            min_edge = 0.15  # cheap tokens need more edge (higher variance)
         edge = confidence - target_price
-        if edge < min_edge: return None
+        if edge < 0.15: return None
 
         return {"s": "LATENCY", "dir": "YES" if up else "NO", "yes": up,
                 "edge": edge, "pred": confidence, "p": target_price, "chg": chg, "sz": 0}
@@ -2020,8 +1995,8 @@ class S_Flash:
         btc_2m = f.chg(120)
         btc_1m = f.chg(60)
         btc_move = max(abs(btc_2m), abs(btc_1m))
-        if btc_move < 0.0015:  # Less than 0.15% move = not a real signal
-            return None
+        # v9.3: Removed 0.15% min BTC move — data shows Flash profits from cheap entries
+        # regardless of BTC move size. The price + confirmation logic is enough.
 
         regime = trend.regime if trend else ""
         strong_up = regime in ("TRENDING_UP",) or (regime == "BREAKOUT" and trend.trend_dir > 0)
@@ -2184,61 +2159,9 @@ class S_Grinder:
         s._last_signal = 0
     
     def check(s, m, f, trend):
-        if f.n < 30: return None
-        tl = (m.end - datetime.now(timezone.utc)).total_seconds()
-        
-        # Only in last 4 minutes, not last 45 seconds (too late to fill)
-        # v9.2: expanded from 3 min to 4 min for more opportunities
-        if tl > 240 or tl < 45: return None
-        
-        # Cooldown: one signal per market maximum
-        if time.time() - s._last_signal < 120: return None
-        
-        # How much has BTC moved from market open?
-        chg_open = 0
-        if m.open_btc > 0:
-            chg_open = (f.price - m.open_btc) / m.open_btc
-        
-        # Need a CLEAR move — 0.20%+ from market open
-        # v9.2: lowered from 0.30% — more opportunities, still safe with other checks
-        if abs(chg_open) < 0.002: return None
-        
-        btc_up = chg_open > 0
-        
-        # The side that SHOULD win
-        winning_price = m.yes_p if btc_up else m.no_p
-        winning_side = "YES" if btc_up else "NO"
-        is_yes = btc_up
-        
-        # Must be in the sweet spot: $0.78-$0.93
-        # v9.2: expanded from 0.82-0.92. With maker orders (0% fee), wider range is profitable
-        # At $0.78 with maker: profit = $0.22/token = 28% return
-        # At $0.93 with maker: profit = $0.07/token = 7.5% return  
-        if winning_price < 0.78 or winning_price > 0.93: return None
-        
-        # SAFETY CHECK 1: BTC still moving in our direction in last 60s
-        # If BTC started reversing, skip — the "near-certain" is no longer certain
-        btc_60s = f.chg(60)
-        if btc_up and btc_60s < -0.001: return None   # BTC reversing down
-        if not btc_up and btc_60s > 0.001: return None  # BTC reversing up
-        
-        # SAFETY CHECK 2: Trend engine agrees
-        if trend:
-            if btc_up and trend.trend_dir < 0: return None  # trend engine says down
-            if not btc_up and trend.trend_dir > 0: return None  # trend engine says up
-        
-        # SAFETY CHECK 3: Don't grind in HIGH volatility — flash crashes happen
-        if trend and trend.volatility_regime == "HIGH": return None
-        
-        s._last_signal = time.time()
-        profit_per_token = 0.98 - winning_price  # after 2% fee
-        
-        return {
-            "s": "GRINDER", "dir": winning_side, "yes": is_yes,
-            "price": winning_price, "chg_open": chg_open,
-            "profit_pct": profit_per_token / winning_price * 100,
-            "tl": tl, "sz": 0
-        }
+        # v9.3: DISABLED — data shows buying at $0.78-$0.93 is not profitable
+        # $0.70-$0.85 range: 70% WR but -$12 net. Math doesn't work.
+        return None
 
 
 # ─── MARKET FINDER ───
@@ -3838,7 +3761,7 @@ class Bot:
 
         # Total risk on this market (15% balance cap per market)
         market_risk = sum(p.cost for p in open_here)
-        max_market_risk = s.risk.show_bal * 0.15  # v9.1: was 0.25, reduced — $876 loss on single market overnight
+        max_market_risk = s.risk.show_bal * 0.25  # v9.3: restored from 0.15 to v8.1's 0.25
         if market_risk >= max_market_risk: return
 
         # Same-strategy stacking requires: 5+ min left, TRENDING/BREAKOUT regime
