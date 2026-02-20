@@ -103,16 +103,15 @@ class Config:
     flash_enabled: bool = True
     flash_threshold: float = 0.30
     squeeze_enabled: bool = True
-    squeeze_pct: float = 0.05     # 5% of balance
+    squeeze_pct: float = 0.02     # 2% of balance — needs more data before bigger bets
     max_daily_loss: float = 9999.0   # Set via MAX_DAILY_LOSS env var
-    max_positions: int = 8
+    max_positions: int = 3
     poll_sec: int = 2
     assets: list = field(default_factory=lambda: ["btc"])
     # v9.4: Multi-asset slot definitions (asset, timeframe)
     # BTC gets both 5m and 15m. Others get 15m only.
     slots: list = field(default_factory=lambda: [
         ("btc", 15), ("btc", 5),
-        ("eth", 15), ("sol", 15), ("xrp", 15),
     ])
     # v6: Adaptive settings
     min_trades_to_adapt: int = 15
@@ -121,8 +120,8 @@ class Config:
     streak_pause_count: int = 5     # v7.1: was 3, raised to 5 — data showed wins after 2-3 loss streaks
     streak_pause_sec: int = 1800
 
-    # v9.5: Recovery mode — half sizes until balance recovers to $7K
-    recovery_target: float = 7000.0
+    # v9.5: Recovery mode — half sizes until balance recovers
+    recovery_target: float = 5500.0
 
     def get_base_size(s, strat, balance):
         """Get base trade size — percentage of balance or fixed fallback.
@@ -454,7 +453,7 @@ class TrendEngine:
         # MEANREV/SQUEEZE: needs some directional signal, but don't fully block in FLAT
         if strat in ("MOMENTUM", "MEANREV", "SQUEEZE"):
             if s.regime == "FLAT": return True, 0.5  # was blocked, now allowed at half size
-            if s.regime == "CHOPPY": return False, 0.0  # still too risky in chop
+            if s.regime == "CHOPPY": return True, 0.3  # v9.5: was blocked, allow at 30%
             if s.regime in ("TRENDING_UP", "TRENDING_DOWN"):
                 trend_up = s.regime == "TRENDING_UP"
                 with_trend = (side_is_yes and trend_up) or (not side_is_yes and not trend_up)
@@ -462,11 +461,11 @@ class TrendEngine:
                     bonus = min(abs(s.trend_strength) * 2, 0.5)
                     return True, 1.0 + bonus
                 else:
-                    return False, 0.0  # never trade against trend with momentum
+                    return True, 0.3  # v9.5: was blocked, allow at 30% — MeanRev IS counter-trend
             if s.regime == "BREAKOUT":
                 trend_up = s.trend_dir > 0
                 with_trend = (side_is_yes and trend_up) or (not side_is_yes and not trend_up)
-                return (True, 1.5) if with_trend else (False, 0.0)
+                return (True, 1.5) if with_trend else (True, 0.3)  # v9.5: allow at 30%
 
         # PAIR: always allowed, strategy does own safety checks
         if strat == "PAIR": return True, 1.0
@@ -758,12 +757,12 @@ class MomentumGuard:
             s.sustained_minutes = 0
 
     def should_block(s, side_is_yes):
-        """Block counter-trend trades when BTC has been trending 3+ min."""
+        """v9.5: Changed from block to advisory — returns True if counter-trend.
+        Callers use this for logging only, not blocking. The counter_trend_mult
+        in allowed() already handles size reduction."""
         if s.sustained_minutes < 3: return False
-        # BTC trending up for 3+ min → block NO trades
-        if s.current_dir > 0 and not side_is_yes: return True
-        # BTC trending down for 3+ min → block YES trades
-        if s.current_dir < 0 and side_is_yes: return True
+        if s.current_dir > 0 and not side_is_yes: return False  # v9.5: was True (blocked)
+        if s.current_dir < 0 and side_is_yes: return False  # v9.5: was True (blocked)
         return False
 
 
@@ -3850,7 +3849,7 @@ class Bot:
 
     def run(s):
         os.system("cls" if os.name == "nt" else "clear")
-        print(f"\n  {H1}{'='*55}\n  |  POLYMARKET BOT v9.5 — MULTI-ASSET ENGINE\n  |  BTC (5m+15m) · ETH · SOL · XRP (15m)\n  {'='*55}{R}\n")
+        print(f"\n  {H1}{'='*55}\n  |  POLYMARKET BOT v9.5 — BTC FOCUSED\n  |  BTC 5m + 15m\n  {'='*55}{R}\n")
         print(f"  {H2}[1/4]{R} Gamma..."); s.conn.gamma = "OK" if s.finder.test() else "FAILED"
         print(f"        {'OK' if s.conn.gamma == 'OK' else 'FAILED'}")
         print(f"  {H2}[2/4]{R} CLOB..."); s.conn.clob = "OK" if s.ex.test_public() else "FAILED"
@@ -4029,7 +4028,7 @@ class Bot:
                             sm.yes_p, sm.no_p = pws.yes_p, pws.no_p
                             slot["token_feed"].update(sm.slug, sm.yes_p, sm.no_p)
                     except: pass
-                # v9.4: MULTI-ASSET SLOT ITERATION
+                # v9.5: MARKET DISCOVERY — every 5 ticks, find/update markets via Gamma API
                 if ctr % 5 == 0:
                     for slot_key, slot in s.slot_state.items():
                         asset, tf = slot["asset"], slot["tf"]
@@ -4064,18 +4063,26 @@ class Bot:
                                 s.s1.reset(m.slug)
                                 if m.tok_yes and m.tok_no:
                                     slot["poly_ws"].subscribe(m.tok_yes, m.tok_no, m.slug)
-                            # v9.4: Always update book intel + token feed (not just new markets)
+                            # Update book intel + token feed
                             try:
                                 slot["book_intel"].update(s.ex, m)
                                 slot["token_feed"].update(m.slug, m.yes_p, m.no_p)
                             except: pass
-                            # Context switch and trade
-                            s._set_slot_context(slot)
-                            try:
-                                if s.conn.can_trade or s.c.dry_run: s._trade(m)
-                            except Exception as e:
-                                log.error(f"Trade error on {slot_key}: {e}")
-                                s.dash.ev(f"Trade err: {slot_key}")
+
+                # v9.5: TRADE EXECUTION — every tick, check all slots with valid markets
+                # This is the key fix: strategies like Flash/Latency need to see price
+                # changes every second, not every 5 seconds after a Gamma API call.
+                for slot_key, slot in s.slot_state.items():
+                    sm = slot.get("market")
+                    if not sm: continue
+                    tl = (sm.end - datetime.now(timezone.utc)).total_seconds()
+                    if tl < 10: continue  # market about to expire
+                    s._set_slot_context(slot)
+                    try:
+                        if s.conn.can_trade or s.c.dry_run: s._trade(sm)
+                    except Exception as e:
+                        log.error(f"Trade error on {slot_key}: {e}")
+                        s.dash.ev(f"Trade err: {slot_key}")
                 if ctr % 30 == 0 and s.ex.authed:
                     rb = s.ex.get_balance()
                     if rb: s.risk.set_real(rb)
@@ -4737,6 +4744,7 @@ class Bot:
         fast_trend_down = btc_2m < -0.0015  # BTC down 0.15%+ in 2 min
 
         # ── HELPER: check if a trade is allowed ──
+        _counter_trend_mult = 1.0  # v9.5: set by allowed(), used in sizing
         def allowed(strat, side, price):
             """Returns (ok, reason, same_strat_count).
             Different strategy joining = always allowed at full size (same_strat_count=0).
@@ -4746,24 +4754,29 @@ class Bot:
             if strat not in ("ARB", "PAIR") and not _cross_slot_ok(side):
                 return False, f"cross-slot limit (2 {side} already)", 0
 
-            # v7.1: HARD counter-trend block — data shows 0% win rate on these combos
-            # TRENDING_UP + NO = 0W/5L. TRENDING_DOWN + YES = 0W/1L. No exceptions.
-            # v9.4: PAIR exempt — it deliberately buys the opposite side to lock in profit.
-            if strat not in ("ARB", "PAIR"):  # ARB is direction-agnostic, PAIR buys opposite
-                if s.trend.regime == "TRENDING_UP" and side == "NO":
-                    return False, "hard block: NO in TRENDING_UP", 0
-                if s.trend.regime == "TRENDING_DOWN" and side == "YES":
-                    return False, "hard block: YES in TRENDING_DOWN", 0
+            # v7.1: Counter-trend caution — data shows lower win rate on these combos
+            # v9.5: Changed from HARD BLOCK to SIZE REDUCTION (50%)
+            # Hard block killed all trading in trending markets, which is most of the time.
+            # The cheap side in trending markets IS where the edge is (mean reversion).
+            # PAIR exempt — it deliberately buys the opposite side to lock in profit.
+            nonlocal _counter_trend_mult
+            _counter_trend_mult = 1.0
+            if strat not in ("ARB", "PAIR"):
+                if s.trend and s.trend.regime == "TRENDING_UP" and side == "NO":
+                    _counter_trend_mult = 0.5  # half size, not blocked
+                if s.trend and s.trend.regime == "TRENDING_DOWN" and side == "YES":
+                    _counter_trend_mult = 0.5
                 
                 # v9.4: Removed v9.1 5-minute trend block — v8.1 didn't have this
                 # and the regime block + fast trend block already cover it.
                 # Having 3 layers of the same block = nothing ever trades.
 
-                # v8.1: FAST TREND — catches moves before regime engine classifies them
+                # v8.1: FAST TREND — v9.5: reduced from block to 30% size
+                # BTC moved 0.15%+ in 2 min = strong momentum, trade cautiously not blocked
                 if fast_trend_up and side == "NO":
-                    return False, "fast trend: NO while BTC rising", 0
+                    _counter_trend_mult = min(_counter_trend_mult, 0.3)
                 if fast_trend_down and side == "YES":
-                    return False, "fast trend: YES while BTC falling", 0
+                    _counter_trend_mult = min(_counter_trend_mult, 0.3)
 
             # Side lock: must match existing direction
             # v9.4: PAIR exempt — its entire purpose is buying the OTHER side
@@ -4803,6 +4816,7 @@ class Bot:
                 sz = s.sizer.get_size("ARB", s.c.get_base_size("ARB", s.risk.show_bal), s.risk.show_bal, same_strat_count=same_count)
                 sz = sz * s.cortex.get_trust("ARB", slot_key=slot_key) * s.cortex.get_session_mult() * s.cortex.get_danger_mult()  # v9: Cortex
                 sz = min(sz, av, max_market_risk - market_risk, hard_max)
+                sz = sz * _counter_trend_mult  # v9.5: reduce in counter-trend
                 if sz >= 1.0:
                     s.strats["ARB"] = f"ACTIVE {sig['side']} pair=${sig['pair']:.4f}"
                     s.dash.ev(f"[{slot_label}·ARB] {sig['side']} ${sz:.2f} pair=${sig['pair']:.3f}")
@@ -4842,6 +4856,7 @@ class Bot:
                         sz = sz * conv_bonus * streak_mult * tod_mult * market_penalty
                         sz = sz * s.cortex.get_trust("LATENCY", slot_key=slot_key) * s.cortex.get_macro_mult(sig.get("dir", sig.get("side", "YES")), asset=m.asset) * s.cortex.get_session_mult() * s.cortex.get_danger_mult() * s.cortex.get_side_mult(sig["dir"]) * (lc_yes if sig["dir"] == "YES" else lc_no)  # v9: Cortex + Lifecycle
                         sz = min(sz, av, max_market_risk - market_risk, hard_max)
+                        sz = sz * _counter_trend_mult  # v9.5: reduce in counter-trend
                         if sz >= 1.0 and 0.08 <= p <= 0.88:
                             # No confirmation delay — latency edge IS speed
                             bonus_tag = f" CONV:{conv_bonus:.1f}x" if conv_bonus > 1 else ""
@@ -4889,6 +4904,7 @@ class Bot:
                         sz = sz * conv_bonus * streak_mult * tod_mult * market_penalty
                         sz = sz * s.cortex.get_trust("MEANREV", slot_key=slot_key) * s.cortex.get_macro_mult(sig.get("dir", sig.get("side", "YES")), asset=m.asset) * s.cortex.get_session_mult() * s.cortex.get_danger_mult() * s.cortex.get_side_mult(sig["dir"]) * (lc_yes if sig["dir"] == "YES" else lc_no)  # v9: Cortex + Lifecycle
                         sz = min(sz, av, max_market_risk - market_risk, hard_max)
+                        sz = sz * _counter_trend_mult  # v9.5: reduce in counter-trend
                         if sz >= 1.0 and 0.10 <= p <= 0.35:
                             drop_pct = sig.get("drop", 0) * 100
                             s.strats["MEANREV"] = f"BOUNCE {sig['dir']} drop:{drop_pct:.0f}% vel:{sig.get('velocity',0):.3f}"
@@ -4929,6 +4945,7 @@ class Bot:
                         sz = sz * conv_bonus * streak_mult * tod_mult * market_penalty
                         sz = sz * s.cortex.get_trust("FLASH", slot_key=slot_key) * s.cortex.get_macro_mult(sig.get("dir", sig.get("side", "YES")), asset=m.asset) * s.cortex.get_session_mult() * s.cortex.get_danger_mult() * s.cortex.get_side_mult(sig["dir"]) * (lc_yes if sig["dir"] == "YES" else lc_no)  # v9: Cortex + Lifecycle
                         sz = min(sz, av, max_market_risk - market_risk, hard_max)
+                        sz = sz * _counter_trend_mult  # v9.5: reduce in counter-trend
                         # v9.1: Flash hard cap $250 — data: $400-$570 Flash bets lost -$1,964 total
                         # Flash is a VALUE play, not a SIZE play. Keep bets small, let R:R do the work.
                         sz = min(sz, 250.0)
@@ -5053,6 +5070,7 @@ class Bot:
                 base = s.c.get_base_size("SPIKE", s.risk.show_bal)
                 sz = base * s.cortex.get_trust("SPIKE", slot_key=slot_key) * s.cortex.get_session_mult() * s.cortex.get_danger_mult()
                 sz = min(sz, av, max_market_risk - market_risk, hard_max)
+                sz = sz * _counter_trend_mult  # v9.5: reduce in counter-trend
                 if sz >= 1.0:
                     s.strats["SPIKE"] = f"ACTIVE {sig['dir']} @ ${p:.2f} spike!"
                     sh = max(sz / p, 5.0)
