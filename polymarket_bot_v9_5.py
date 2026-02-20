@@ -4033,11 +4033,18 @@ class Bot:
 
     def _cancel_exp(s):
         now = datetime.now(timezone.utc)
-        if s.mkt:
-            tl = (s.mkt.end - now).total_seconds()
-            if 0 < tl < 120 and s._orders:
-                try: s.ex.cancel_all(); s._orders = []; s.dash.ev("Cancelled — expiring")
-                except: pass
+        # v9.5: Check ALL slot markets for expiring orders
+        any_expiring = False
+        for slot_key, slot in s.slot_state.items():
+            sm = slot.get("market")
+            if sm:
+                tl = (sm.end - now).total_seconds()
+                if 0 < tl < 120:
+                    any_expiring = True
+                    break
+        if any_expiring and s._orders:
+            try: s.ex.cancel_all(); s._orders = []; s.dash.ev("Cancelled — expiring")
+            except: pass
 
     def _auto_redeem(s):
         if not s._traded_cids: return
@@ -4060,6 +4067,29 @@ class Bot:
         """Periodic cleanup for long-running stability.
         Only cleans MEMORY — all learning data stays in trade_data.json."""
         now = datetime.now(timezone.utc)
+
+        # 0. v9.5: PHANTOM POSITION CLEANUP — detect unfilled GTC orders
+        # If bot has an OPEN position but the market has ended AND there's no
+        # matching position on Polymarket, the order never filled → remove it.
+        if s._poly_pos is not None:
+            poly_slugs = set()
+            for pp in (s._poly_pos or []):
+                ps = pp.get("slug") or pp.get("market", {}).get("slug", "")
+                if ps: poly_slugs.add(ps)
+            phantoms = []
+            for p in s.risk.positions:
+                if p.status != "OPEN": continue
+                if p.market_end and (now - p.market_end).total_seconds() > 120:
+                    # Market ended 2+ min ago — check if Polymarket knows about it
+                    if p.slug not in poly_slugs:
+                        phantoms.append(p)
+            for p in phantoms:
+                log.info(f"PHANTOM CLEANUP: {p.strat} {p.side} ${p.cost:.2f} on {p.slug} — order never filled")
+                s.dash.ev(f"Phantom removed: {p.strat} ${p.cost:.2f} (unfilled)")
+                p.status = "CANCELLED"
+                p.pnl = 0.0
+                # Return the risk
+                s.risk.open_risk = max(0, s.risk.open_risk - p.cost)
 
         # 1. Remove resolved positions older than 30 min from memory
         # (they're already logged to trade_history.txt and trade_data.json)
