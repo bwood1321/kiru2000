@@ -1186,6 +1186,9 @@ class Cortex:
             # Recalc all trust scores
             for st in s.STRATS:
                 s._recalc_trust(st)
+                # v9.4: Floor trust at 0.40 — old data shouldn't disable strategies
+                if s._trust[st] < 0.40:
+                    s._trust[st] = 0.40
 
             log.info(f"Cortex loaded: {', '.join(f'{st}={s._trust[st]:.2f}' for st in s.STRATS)}")
         except Exception as e:
@@ -1231,9 +1234,9 @@ class Cortex:
         elif pnl_pct > -0.05:   # within ±5%
             base = 1.0
         elif pnl_pct > -0.15:   # down 5-15%
-            base = 0.85  # gentle pullback, not panic
+            base = 0.90  # v9.4: gentle pullback (was 0.85)
         else:                    # down 15%+
-            base = 0.7   # floor — never below 70%
+            base = 0.85  # v9.4: floor raised (was 0.7) — 30% WR means losing streaks are NORMAL
 
         # v9.1: Recovery detection — if we're in CAREFUL mode but just won 2+ in a row,
         # the market turned. Snap back up. Don't stay scared when things are working.
@@ -1243,18 +1246,17 @@ class Cortex:
         s._session_mult = base
 
     def _update_side_mult(s):
-        """v9.1: Directional session bias. If one side keeps losing, reduce it.
-        YES 0W/3L+ → YES trades get 0.5x. Still allows trades, just smaller.
-        Resets when the side wins one — proof the direction changed."""
+        """v9.4: Gentler side bias. At 30% WR, losing streaks per side are NORMAL.
+        Only slight reduction, never crush a side."""
         for side in ("YES", "NO"):
             w = s._side_wins[side]
             l = s._side_losses[side]
             if l >= 3 and w == 0:
-                s._side_mult[side] = 0.4   # 3+ losses, 0 wins → severe reduction
+                s._side_mult[side] = 0.7   # v9.4: was 0.4 — too aggressive
             elif l >= 2 and w == 0:
-                s._side_mult[side] = 0.6   # 2 losses, 0 wins → moderate reduction
+                s._side_mult[side] = 0.8   # v9.4: was 0.6
             elif l > w + 2:
-                s._side_mult[side] = 0.7   # losing side but has some wins
+                s._side_mult[side] = 0.85  # v9.4: was 0.7
             else:
                 s._side_mult[side] = 1.0   # fine
 
@@ -1263,21 +1265,18 @@ class Cortex:
         return s._side_mult.get(side, 1.0)
 
     def get_lifecycle_mult(s, side, minute, yes_price):
-        """v9.1: Lifecycle model multiplier. If model has enough data and shows
-        a strong edge, boost trades aligned with the predicted direction.
-        Returns 0.6-1.4 multiplier."""
+        """v9.4: Simplified. Slight boost for aligned trades, NO reduction.
+        Multiple stacking multipliers were killing trade size."""
         prob_up, confidence = s.get_lifecycle_edge(minute, yes_price)
         if prob_up is None or confidence < 0.15:
             return 1.0  # not enough data or too close to 50/50
 
-        # Does the predicted direction match the trade?
-        if side == "YES":
-            if prob_up >= 0.60:   return 1.0 + confidence * 0.4  # max 1.4x boost
-            elif prob_up <= 0.40: return max(0.6, 1.0 - confidence * 0.4)  # reduce
-        elif side == "NO":
-            if prob_up <= 0.40:   return 1.0 + confidence * 0.4  # NO aligns with DOWN
-            elif prob_up >= 0.60: return max(0.6, 1.0 - confidence * 0.4)
-        return 1.0
+        # Boost aligned trades, but never reduce below 0.85
+        if side == "YES" and prob_up >= 0.60:
+            return 1.0 + confidence * 0.3  # max 1.3x boost
+        elif side == "NO" and prob_up <= 0.40:
+            return 1.0 + confidence * 0.3
+        return 0.85  # slight reduction for counter-lifecycle, not 0.6x
 
     def _update_macro_bias(s):
         """Cross-market momentum from outcome memory."""
@@ -1845,7 +1844,7 @@ class S_Latency:
         # $0.50-$0.70 range: 50% WR, -$2,309 loss
         max_price = 0.40
         
-        if target_price > max_price or target_price < 0.12: return None
+        if target_price > max_price or target_price < 0.15: return None  # v9.4: raised from 0.12, data shows <$0.15 = 7% WR
 
         # Other side shouldn't be too cheap (if both cheap → ARB handles it)
         other_price = m.no_p if up else m.yes_p
@@ -1983,8 +1982,8 @@ class S_Flash:
         if not s.c.flash_enabled or f.n < 10: return None
         # v9.1: Raised min from $0.10 to $0.15 — data shows $0.10-$0.15 entries are 17% WR, -$921
         # These look "cheap" but they're traps: $0.10 YES in downtrend = 90% market says DOWN
-        yes_cheap = 0.12 <= m.yes_p <= 0.32
-        no_cheap = 0.12 <= m.no_p <= 0.32
+        yes_cheap = 0.15 <= m.yes_p <= 0.32
+        no_cheap = 0.15 <= m.no_p <= 0.32
         if not yes_cheap and not no_cheap: return None
         tl = (m.end - datetime.now(timezone.utc)).total_seconds()
         if tl < 180: return None  # 3 min minimum
@@ -2009,31 +2008,13 @@ class S_Flash:
             if not no_cheap:
                 return None
 
-        # v8: VOLATILITY GATE — prefer low/normal volatility
+        # v9.4: Removed volatility gate. High volatility = big moves = cheap tokens
+        # Our best trades came during volatile periods. The confirmation logic
+        # (btc, book, velocity) already filters bad entries.
         vol_ok = True
-        if trend and trend.volatility_regime == "HIGH":
-            vol_ok = False
 
-        # YES cheap → BTC dropped then recovering → buy YES
-        if yes_cheap and not strong_down:
-            book_confirms = True
-            if book_intel and book_intel.yes_ask_depth > 0:
-                if book_intel.selling_pressure("YES"):
-                    book_confirms = False
-
-            vel_confirms = True
-            if token_feed and token_feed.n >= 5:
-                vel = token_feed.token_velocity("YES", 20)
-                if vel < -0.005:
-                    vel_confirms = False
-
-            # v9.1: Stricter BTC confirmation — need actual recovery, not just "flat enough"
-            recovering = f.chg(30) > 0.0003  # BTC actively bouncing (not just flat)
-            btc_confirms = recovering and trend.trend_dir >= 0
-
-            confirms = sum([btc_confirms, book_confirms, vel_confirms])
-            if confirms >= 2 and vol_ok:
-                return {"s": "FLASH", "dir": "YES", "yes": True, "price": m.yes_p, "sz": 0}
+        # v9.4: RULE 5 — Check NO side FIRST. Data: Down +$3,936, Up +$75
+        # BTC drops faster than it rises → NO side wins more often
 
         # NO cheap → BTC pumped then fading → buy NO
         if no_cheap and not strong_up:
@@ -2055,6 +2036,27 @@ class S_Flash:
             confirms = sum([btc_confirms, book_confirms, vel_confirms])
             if confirms >= 2 and vol_ok:
                 return {"s": "FLASH", "dir": "NO", "yes": False, "price": m.no_p, "sz": 0}
+
+        # YES cheap → BTC dropped then recovering → buy YES
+        if yes_cheap and not strong_down:
+            book_confirms = True
+            if book_intel and book_intel.yes_ask_depth > 0:
+                if book_intel.selling_pressure("YES"):
+                    book_confirms = False
+
+            vel_confirms = True
+            if token_feed and token_feed.n >= 5:
+                vel = token_feed.token_velocity("YES", 20)
+                if vel < -0.005:
+                    vel_confirms = False
+
+            # v9.1: Stricter BTC confirmation — need actual recovery, not just "flat enough"
+            recovering = f.chg(30) > 0.0003  # BTC actively bouncing (not just flat)
+            btc_confirms = recovering and trend.trend_dir >= 0
+
+            confirms = sum([btc_confirms, book_confirms, vel_confirms])
+            if confirms >= 2 and vol_ok:
+                return {"s": "FLASH", "dir": "YES", "yes": True, "price": m.yes_p, "sz": 0}
 
         return None
 
@@ -2090,8 +2092,8 @@ class S_Squeeze:
         # Only in final 5 minutes, not last 60 seconds
         if tl > 300 or tl < 60: return None
 
-        yes_cheap = 0.08 <= m.yes_p <= 0.22
-        no_cheap = 0.08 <= m.no_p <= 0.22
+        yes_cheap = 0.12 <= m.yes_p <= 0.22  # v9.4: raised from 0.08
+        no_cheap = 0.12 <= m.no_p <= 0.22
         if not yes_cheap and not no_cheap: return None
 
         # 45-second cooldown
@@ -3759,10 +3761,15 @@ class Bot:
             if p.strat not in strat_best_entry or p.entry < strat_best_entry[p.strat]:
                 strat_best_entry[p.strat] = p.entry
 
-        # Total risk on this market (15% balance cap per market)
+        # Total risk on this market (25% balance cap per market)
         market_risk = sum(p.cost for p in open_here)
         max_market_risk = s.risk.show_bal * 0.25  # v9.3: restored from 0.15 to v8.1's 0.25
         if market_risk >= max_market_risk: return
+
+        # v9.4: RULE 3 — Max 2 orders per market. Data shows:
+        # 1 buy: +$4,035, 2 buys: +$2,693, 5+buys: -$2,968
+        # Averaging into losers destroys profits.
+        if len(open_here) >= 2: return
 
         # Same-strategy stacking requires: 5+ min left, TRENDING/BREAKOUT regime
         can_same_stack = (tl >= 300 and
@@ -3809,7 +3816,7 @@ class Bot:
 
         # v7.2: Hard max size cap — no single trade exceeds 10% of balance
         # This catches multiplier stacking (trend * conviction * streak * tod)
-        hard_max = s.risk.show_bal * 0.10
+        hard_max = min(s.risk.show_bal * 0.10, 400)  # v9.4: $400 hard cap. Data: $150-400 = +$3,121, $400+ = -$41
 
         # v8: Per-market loss limit — reduce or block after losses on this market
         market_penalty = s.market_losses.get_penalty(m.slug)
