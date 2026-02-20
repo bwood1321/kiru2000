@@ -2807,9 +2807,13 @@ class Executor:
                 best_ask = float(asks[0].get("price", price))
                 current_price = best_ask
         except: pass
-        # Reject if price moved more than 5c above original signal price
-        if current_price > price + 0.05:
+        # Reject if price moved more than 3c above original signal price
+        if current_price > price + 0.03:
             log.warning(f"HYBRID TAKER REJECTED: price moved ${price:.2f} → ${current_price:.2f}")
+            return None, None
+        # Also reject if price is above absolute max for cheap strategies
+        if current_price > 0.42:
+            log.warning(f"HYBRID TAKER REJECTED: price ${current_price:.2f} too expensive")
             return None, None
         log.info(f"HYBRID TAKER FALLBACK: {label} @ ${current_price}")
         return s._order_taker(tid, label, current_price, size, dollar_amount)
