@@ -95,7 +95,7 @@ class Config:
     squeeze_enabled: bool = True
     squeeze_pct: float = 0.05     # 5% of balance
     max_daily_loss: float = 9999.0   # Set via MAX_DAILY_LOSS env var
-    max_positions: int = 3
+    max_positions: int = 5
     poll_sec: int = 2
     assets: list = field(default_factory=lambda: ["btc"])
     # v6: Adaptive settings
@@ -2334,53 +2334,60 @@ class MakerRebateFarmer:
     Places limit orders on both sides of the market at wide prices.
     Even if they don't fill, they earn a share of the daily USDC rebate pool.
     100% of taker fees are redistributed to makers daily.
-    gabagool22 earned $1,700+/day from rebates alone.
     
-    This is NOT a trading strategy — it's a passive income overlay.
-    Orders are placed far from market price so they rarely fill.
-    If they do fill, it's at a great price for us."""
+    CRITICAL: Uses fire-and-forget orders (mode="rebate") that return instantly.
+    Normal maker orders block for 30-60 seconds waiting for fills — that would
+    freeze the dashboard and miss trading opportunities. Rebate orders just sit
+    on the book until the market ends."""
     
     def __init__(s, c):
         s.c = c
         s._last_place = 0
-        s._orders_placed = 0
-        s._est_rebate = 0.0
         s._session_orders = 0
         s._session_volume = 0.0
+        s._active_orders = []  # track placed order IDs for cleanup
+        s._current_slug = None
     
     def place_rebate_orders(s, m, executor, balance):
-        """Place wide limit orders for rebate farming. Call every market cycle."""
+        """Place wide limit orders for rebate farming. NON-BLOCKING."""
         now = time.time()
-        if now - s._last_place < 30: return  # every 30 seconds max
+        if now - s._last_place < 60: return  # once per minute max (was 30s, too aggressive)
         
         tl = (m.end - datetime.now(timezone.utc)).total_seconds() if m.end else 999
-        if tl < 120: return  # don't place in last 2 min (might fill at bad time)
+        if tl < 120: return  # don't place in last 2 min
+        
+        # If market changed, reset tracking
+        if m.slug != s._current_slug:
+            s._active_orders = []
+            s._current_slug = m.slug
+        
+        # Don't stack too many rebate orders
+        if len(s._active_orders) >= 4: return  # max 4 outstanding rebate orders
         
         s._last_place = now
         
-        # Place small orders at extreme prices where we'd be happy to fill
-        # YES side: bid at $0.15 (we'd love to buy YES at $0.15)
-        # NO side: bid at $0.15
-        # These are far from market price, rarely fill, but earn rebate share
-        
         try:
-            rebate_sz = min(balance * 0.005, 20.0)  # tiny orders, $5-20
+            rebate_sz = min(balance * 0.003, 15.0)  # smaller: $3-15 (was $5-20)
             if rebate_sz < 2.0: return
             
-            # Only place if both sides are available
-            if m.tok_yes and m.yes_p > 0.25:  # YES is expensive → our $0.15 bid won't fill
-                shares = rebate_sz / 0.15
-                oid, _ = executor.order(m, True, 0.15, shares, mode="maker")
-                if oid:
-                    s._session_orders += 1
-                    s._session_volume += rebate_sz
+            # Place at $0.12 — far enough from market to rarely fill
+            rebate_price = 0.12
             
-            if m.tok_no and m.no_p > 0.25:  # NO is expensive → our $0.15 bid won't fill
-                shares = rebate_sz / 0.15
-                oid, _ = executor.order(m, False, 0.15, shares, mode="maker")
+            if m.tok_yes and m.yes_p > 0.30:  # YES expensive → our bid is safe
+                shares = rebate_sz / rebate_price
+                oid, _ = executor.order(m, True, rebate_price, shares, mode="rebate")
                 if oid:
                     s._session_orders += 1
                     s._session_volume += rebate_sz
+                    s._active_orders.append(oid)
+            
+            if m.tok_no and m.no_p > 0.30:  # NO expensive → our bid is safe
+                shares = rebate_sz / rebate_price
+                oid, _ = executor.order(m, False, rebate_price, shares, mode="rebate")
+                if oid:
+                    s._session_orders += 1
+                    s._session_volume += rebate_sz
+                    s._active_orders.append(oid)
                     
         except Exception as e:
             pass  # rebate farming is best-effort, never crash the bot
@@ -2389,7 +2396,7 @@ class MakerRebateFarmer:
         """Return status string for dashboard."""
         if s._session_orders == 0:
             return "no orders yet"
-        return f"{s._session_orders} orders, ${s._session_volume:.0f} vol"
+        return f"{s._session_orders} orders, ${s._session_volume:.0f} vol, {len(s._active_orders)} active"
 
 
 # ─── MARKET FINDER ───
@@ -2517,7 +2524,7 @@ class Executor:
         except: pass
         return None
     def order(s, market, is_yes, price, size, mode="taker"):
-        """Place an order. Modes: 'taker' (FOK), 'maker' (GTC limit), 'hybrid' (try maker, fallback taker).
+        """Place an order. Modes: 'taker' (FOK), 'maker' (GTC limit), 'hybrid' (try maker, fallback taker), 'rebate' (fire-and-forget GTC).
         Returns (order_id, actual_shares) or (None, None) on failure."""
         from py_clob_client.clob_types import MarketOrderArgs, OrderArgs, OrderType
         from py_clob_client.order_builder.constants import BUY
@@ -2532,7 +2539,9 @@ class Executor:
         if not s.authed: return None, None
         tid = market.tok_yes if is_yes else market.tok_no
 
-        if mode == "maker":
+        if mode == "rebate":
+            return s._order_rebate(tid, label, price, size)
+        elif mode == "maker":
             return s._order_maker(tid, label, price, size, dollar_amount, timeout=30, retries=2)
         elif mode == "hybrid":
             return s._order_hybrid(tid, label, price, size, dollar_amount)
@@ -2629,6 +2638,29 @@ class Executor:
                 log.error(f"Maker order attempt {attempt+1} fail: {e}")
 
         log.info(f"MAKER GAVE UP after {retries} attempts: {label}")
+        return None, None
+
+    def _order_rebate(s, tid, label, price, size):
+        """Fire-and-forget GTC order for rebate farming. NO BLOCKING.
+        Places order and returns immediately — doesn't wait for fill.
+        These orders sit on the book earning rebate share until market ends."""
+        from py_clob_client.clob_types import OrderArgs, OrderType
+        from py_clob_client.order_builder.constants import BUY
+        try:
+            maker_price = round(max(0.01, min(price, 0.99)), 2)
+            limit_size = max(size, 5.0)
+            signed = s.client.create_order(OrderArgs(
+                price=maker_price, size=round(limit_size, 2), side=BUY, token_id=tid))
+            resp = s.client.post_order(signed, OrderType.GTC)
+            if isinstance(resp, dict):
+                oid = resp.get("orderID") or resp.get("id") or resp.get("order_id") or "?"
+                if oid != "?":
+                    log.debug(f"REBATE-GTC: ${maker_price*limit_size:.2f} {label} @ ${maker_price} id={oid}")
+                    return oid, 0
+            elif isinstance(resp, str) and len(resp) > 5:
+                return resp, 0
+        except Exception as e:
+            log.debug(f"Rebate order fail: {e}")
         return None, None
 
     def _order_hybrid(s, tid, label, price, size, dollar_amount):
