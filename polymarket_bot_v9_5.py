@@ -2061,7 +2061,7 @@ class S_MeanReversion:
     
     def __init__(s, c):
         s.c = c
-        s._last_signal = 0
+        s._last_signal = {}  # v9.5: per-slug cooldowns
         s.scores = {}
     
     def check(s, m, f, trend, token_feed, book_intel):
@@ -2071,14 +2071,14 @@ class S_MeanReversion:
         min_tl = 120 if m.timeframe == 5 else 240
         if tl < min_tl: return None
         
-        # Cooldown: 60 seconds between signals (was 20s — too fast, caused pile-ins)
-        if time.time() - s._last_signal < 60: return None
+        # Cooldown: 60 seconds between signals per market
+        if time.time() - s._last_signal.get(m.slug, 0) < 60: return None
         
         # Check both sides for overextension
         for side, is_yes, price in [("YES", True, m.yes_p), ("NO", False, m.no_p)]:
             signal = s._check_side(side, is_yes, price, m, f, trend, token_feed, book_intel)
             if signal:
-                s._last_signal = time.time()
+                s._last_signal[m.slug] = time.time()
                 return signal
         
         return None
@@ -2171,7 +2171,7 @@ class S_Flash:
         if tl < min_tl: return None
         if tl > (duration - max_age + duration): pass  # allow from start
         market_age = duration - tl
-        if market_age < (60 if m.timeframe == 5 else 180): return None  # wait 1m/3m into market
+        if market_age < (60 if m.timeframe == 5 else 120): return None  # wait 1m/2m into market
 
         regime = trend.regime if trend else ""
         strong_up = regime in ("TRENDING_UP",) or (regime == "BREAKOUT" and trend.trend_dir > 0)
@@ -4345,6 +4345,222 @@ class Bot:
         if removed > 0:
             log.debug(f"Cleanup: removed {removed} old positions, {len(stale_keys)} stale confirms")
 
+    
+    def _cancel_exp(s):
+        now = datetime.now(timezone.utc)
+        # v9.5: Check ALL slot markets for expiring orders
+        any_expiring = False
+        for slot_key, slot in s.slot_state.items():
+            sm = slot.get("market")
+            if sm:
+                tl = (sm.end - now).total_seconds()
+                if 0 < tl < 120:
+                    any_expiring = True
+                    break
+        if any_expiring and s._orders:
+            try: s.ex.cancel_all(); s._orders = []; s.dash.ev("Cancelled — expiring")
+            except: pass
+
+    def _auto_redeem(s):
+        if not s._traded_cids: return
+        try:
+            # Only try 3 CIDs at a time to avoid rate limits
+            batch = list(s._traded_cids)[:3]
+            redeemed = s.ex.redeem_positions(batch)
+            for cid in redeemed:
+                s.dash.ev(f"REDEEMED {cid[:12]}...")
+                s._traded_cids.discard(cid)
+            s._save_traded_cids()
+            if redeemed:
+                time.sleep(5)  # Wait before balance check to avoid rate limit
+                rb = s.ex.get_balance()
+                if rb: s.risk.set_real(rb)
+        except Exception as e:
+            log.debug(f"Auto-redeem error: {e}")
+
+    def _cleanup(s):
+        """Periodic cleanup for long-running stability.
+        Only cleans MEMORY — all learning data stays in trade_data.json."""
+        now = datetime.now(timezone.utc)
+
+        # 0. v9.5: PHANTOM POSITION CLEANUP — detect unfilled GTC orders
+        # If bot has an OPEN position but the market has ended AND there's no
+        # matching position on Polymarket, the order never filled → remove it.
+        if s._poly_pos is not None:
+            poly_slugs = set()
+            for pp in (s._poly_pos or []):
+                ps = pp.get("slug") or pp.get("market", {}).get("slug", "")
+                if ps: poly_slugs.add(ps)
+            phantoms = []
+            for p in s.risk.positions:
+                if p.status != "OPEN": continue
+                if p.market_end and (now - p.market_end).total_seconds() > 120:
+                    # Market ended 2+ min ago — check if Polymarket knows about it
+                    if p.slug not in poly_slugs:
+                        phantoms.append(p)
+            for p in phantoms:
+                log.info(f"PHANTOM CLEANUP: {p.strat} {p.side} ${p.cost:.2f} on {p.slug} — order never filled")
+                s.dash.ev(f"Phantom removed: {p.strat} ${p.cost:.2f} (unfilled)")
+                p.status = "CANCELLED"
+                p.pnl = 0.0
+                # Return the risk
+                s.risk.open_risk = max(0, s.risk.open_risk - p.cost)
+
+        # 1. Remove resolved positions older than 30 min from memory
+        # (they're already logged to trade_history.txt and trade_data.json)
+        before = len(s.risk.positions)
+        s.risk.positions = [p for p in s.risk.positions
+                            if p.status == "OPEN" or
+                            (p.opened and (now - p.opened).total_seconds() < 1800)]
+        removed = before - len(s.risk.positions)
+
+        # 2. Trim trades list but preserve lifetime stats
+        # Trades are already recorded in sizer — this list is only for dashboard display
+        if len(s.risk.trades) > 200:
+            # Save lifetime W/L before trimming
+            s.risk._lifetime_wins = s.risk._lifetime_wins + sum(1 for t in s.risk.trades[:-200] if t.pnl > 0)
+            s.risk._lifetime_losses = s.risk._lifetime_losses + sum(1 for t in s.risk.trades[:-200] if t.pnl < 0)
+            s.risk.trades = s.risk.trades[-200:]
+
+        # 3. Clean stale confirmation entries
+        stale_keys = [k for k, v in s.confirm.pending.items()
+                      if time.time() - v["time"] > 30]
+        for k in stale_keys:
+            del s.confirm.pending[k]
+
+        # 4. Cap traded_cids at 50 (oldest ones probably already resolved)
+        if len(s._traded_cids) > 50:
+            cid_list = list(s._traded_cids)
+            s._traded_cids = set(cid_list[-50:])
+            s._save_traded_cids()
+
+        # 5. Trim _past_trades (dashboard display only)
+        if len(s._past_trades) > 100:
+            s._past_trades = s._past_trades[-100:]
+
+        # 6. Clean old _market_trades entries (markets that resolved long ago)
+        if hasattr(s.cortex, '_market_trades') and len(s.cortex._market_trades) > 20:
+            slugs = list(s.cortex._market_trades.keys())
+            for slug in slugs[:-20]:
+                del s.cortex._market_trades[slug]
+
+        # 7. Clean PairAccum tracker
+        if hasattr(s, 's6') and hasattr(s.s6, '_pairs') and len(s.s6._pairs) > 20:
+            keys = list(s.s6._pairs.keys())
+            for k in keys[:-20]:
+                del s.s6._pairs[k]
+
+        if removed > 0:
+            log.debug(f"Cleanup: removed {removed} old positions, {len(stale_keys)} stale confirms")
+
+    
+    def _cancel_exp(s):
+        now = datetime.now(timezone.utc)
+        # v9.5: Check ALL slot markets for expiring orders
+        any_expiring = False
+        for slot_key, slot in s.slot_state.items():
+            sm = slot.get("market")
+            if sm:
+                tl = (sm.end - now).total_seconds()
+                if 0 < tl < 120:
+                    any_expiring = True
+                    break
+        if any_expiring and s._orders:
+            try: s.ex.cancel_all(); s._orders = []; s.dash.ev("Cancelled — expiring")
+            except: pass
+
+    def _auto_redeem(s):
+        if not s._traded_cids: return
+        try:
+            # Only try 3 CIDs at a time to avoid rate limits
+            batch = list(s._traded_cids)[:3]
+            redeemed = s.ex.redeem_positions(batch)
+            for cid in redeemed:
+                s.dash.ev(f"REDEEMED {cid[:12]}...")
+                s._traded_cids.discard(cid)
+            s._save_traded_cids()
+            if redeemed:
+                time.sleep(5)  # Wait before balance check to avoid rate limit
+                rb = s.ex.get_balance()
+                if rb: s.risk.set_real(rb)
+        except Exception as e:
+            log.debug(f"Auto-redeem error: {e}")
+
+    def _cleanup(s):
+        """Periodic cleanup for long-running stability.
+        Only cleans MEMORY — all learning data stays in trade_data.json."""
+        now = datetime.now(timezone.utc)
+
+        # 0. v9.5: PHANTOM POSITION CLEANUP — detect unfilled GTC orders
+        # If bot has an OPEN position but the market has ended AND there's no
+        # matching position on Polymarket, the order never filled → remove it.
+        if s._poly_pos is not None:
+            poly_slugs = set()
+            for pp in (s._poly_pos or []):
+                ps = pp.get("slug") or pp.get("market", {}).get("slug", "")
+                if ps: poly_slugs.add(ps)
+            phantoms = []
+            for p in s.risk.positions:
+                if p.status != "OPEN": continue
+                if p.market_end and (now - p.market_end).total_seconds() > 120:
+                    # Market ended 2+ min ago — check if Polymarket knows about it
+                    if p.slug not in poly_slugs:
+                        phantoms.append(p)
+            for p in phantoms:
+                log.info(f"PHANTOM CLEANUP: {p.strat} {p.side} ${p.cost:.2f} on {p.slug} — order never filled")
+                s.dash.ev(f"Phantom removed: {p.strat} ${p.cost:.2f} (unfilled)")
+                p.status = "CANCELLED"
+                p.pnl = 0.0
+                # Return the risk
+                s.risk.open_risk = max(0, s.risk.open_risk - p.cost)
+
+        # 1. Remove resolved positions older than 30 min from memory
+        # (they're already logged to trade_history.txt and trade_data.json)
+        before = len(s.risk.positions)
+        s.risk.positions = [p for p in s.risk.positions
+                            if p.status == "OPEN" or
+                            (p.opened and (now - p.opened).total_seconds() < 1800)]
+        removed = before - len(s.risk.positions)
+
+        # 2. Trim trades list but preserve lifetime stats
+        # Trades are already recorded in sizer — this list is only for dashboard display
+        if len(s.risk.trades) > 200:
+            # Save lifetime W/L before trimming
+            s.risk._lifetime_wins = s.risk._lifetime_wins + sum(1 for t in s.risk.trades[:-200] if t.pnl > 0)
+            s.risk._lifetime_losses = s.risk._lifetime_losses + sum(1 for t in s.risk.trades[:-200] if t.pnl < 0)
+            s.risk.trades = s.risk.trades[-200:]
+
+        # 3. Clean stale confirmation entries
+        stale_keys = [k for k, v in s.confirm.pending.items()
+                      if time.time() - v["time"] > 30]
+        for k in stale_keys:
+            del s.confirm.pending[k]
+
+        # 4. Cap traded_cids at 50 (oldest ones probably already resolved)
+        if len(s._traded_cids) > 50:
+            cid_list = list(s._traded_cids)
+            s._traded_cids = set(cid_list[-50:])
+            s._save_traded_cids()
+
+        # 5. Trim _past_trades (dashboard display only)
+        if len(s._past_trades) > 100:
+            s._past_trades = s._past_trades[-100:]
+
+        # 6. Clean old _market_trades entries (markets that resolved long ago)
+        if hasattr(s.cortex, '_market_trades') and len(s.cortex._market_trades) > 20:
+            slugs = list(s.cortex._market_trades.keys())
+            for slug in slugs[:-20]:
+                del s.cortex._market_trades[slug]
+
+        # 7. Clean PairAccum tracker
+        if hasattr(s, 's6') and hasattr(s.s6, '_pairs') and len(s.s6._pairs) > 20:
+            keys = list(s.s6._pairs.keys())
+            for k in keys[:-20]:
+                del s.s6._pairs[k]
+
+        if removed > 0:
+            log.debug(f"Cleanup: removed {removed} old positions, {len(stale_keys)} stale confirms")
+
     def _trade(s, m):
         if not s.risk.ok(): return
         tl = (m.end - datetime.now(timezone.utc)).total_seconds()
@@ -4457,12 +4673,16 @@ class Bot:
         s.conviction.reset(m.slug)
 
         # v7.2: Per-strategy minimum time left
-        # 3+ min for directional strategies (need time for market to play out)
-        # Squeeze is designed for last 5 min (handled in its own check)
-        # ARB is time-agnostic
-        lat_ok = tl >= 180   # 3 minutes
-        flash_ok = tl >= 180  # 3 minutes
-        mom_ok = tl >= 180    # 3 minutes
+        # v9.5: Timeframe-aware — 5m markets get shorter windows
+        # Each strategy's own check() also validates, this is a safety net
+        if m.timeframe == 5:
+            lat_ok = tl >= 90    # 1.5 min for 5m
+            flash_ok = tl >= 90  # 1.5 min for 5m
+            mom_ok = tl >= 90    # 1.5 min for 5m
+        else:
+            lat_ok = tl >= 180   # 3 minutes for 15m
+            flash_ok = tl >= 180
+            mom_ok = tl >= 180
 
         # v7.2: Hard max size cap — no single trade exceeds 10% of balance
         # This catches multiplier stacking (trend * conviction * streak * tod)
@@ -4568,7 +4788,7 @@ class Bot:
 
         # ── S2: LATENCY (speed-based, fires immediately) ──
         sig = s.s2.check(m, s.feed, s.trend)
-        if sig and lat_ok and time.time() - s.cd.get("lat", 0) > 15 and not s.sizer.is_paused("LATENCY") and not bad_hour:
+        if sig and lat_ok and time.time() - s.cd.get(f"lat:{slot_key}", 0) > 15 and not s.sizer.is_paused("LATENCY") and not bad_hour:
             p = sig["p"]
             # v7: Momentum guard — block counter-trend in sustained trends
             if s.momentum_guard.should_block(sig["yes"]):
@@ -4597,12 +4817,12 @@ class Bot:
                             oid, actual_shares = s.ex.order(m, sig["yes"], p, sh, mode="hybrid")
                             if oid:
                                 t = Trd(datetime.now(timezone.utc), "LATENCY", m.slug, sig["dir"], p, sz, oid=oid)
-                                s.risk.open(t, market_end=m.end, actual_shares=actual_shares, entry_regime=s.trend.regime if s.trend else "UNKNOWN"); s.cd["lat"] = time.time()
+                                s.risk.open(t, market_end=m.end, actual_shares=actual_shares, entry_regime=s.trend.regime if s.trend else "UNKNOWN"); s.cd[f"lat:{slot_key}"] = time.time()
                                 if m.cid: s._traded_cids.add(m.cid); s._save_traded_cids()
                                 # v7: Record conviction
                                 s.conviction.record_signal(m.slug, "LATENCY", sig["dir"])
                                 # v8.1: Latency gets 60s alone — other strats don't pile on
-                                s.cd["lat_isolate"] = time.time()
+                                s.cd[f"lat_iso:{slot_key}"] = time.time()
                                 s._beep()
                         else: s.strats["LATENCY"] = f"signal! {sig['dir']} price=${p:.2f}"
                     else:
@@ -4613,10 +4833,10 @@ class Bot:
         # ── S3: MEAN REVERSION (v8: replaces dead Momentum — buys the bounce) ──
         # v8.1: Don't fire if Latency has an open position (protect the crown jewel)
         latency_open = any(p.strat == "LATENCY" and p.status == "OPEN" for p in open_here)
-        lat_isolate = time.time() - s.cd.get("lat_isolate", 0) < 60
+        lat_isolate = time.time() - s.cd.get(f"lat_iso:{slot_key}", 0) < 60
         sig = None if s.cortex.is_disabled("MEANREV") else s.s3.check(m, s.feed, s.trend, s.token_feed, s.book_intel)
         if s.cortex.is_disabled("MEANREV"): s.strats["MEANREV"] = "☠ disabled"
-        if sig and mom_ok and not latency_open and not lat_isolate and time.time() - s.cd.get("mrev", 0) > 20 and not s.sizer.is_paused("MEANREV") and not bad_hour:
+        if sig and mom_ok and not latency_open and not lat_isolate and time.time() - s.cd.get(f"mrev:{slot_key}", 0) > 20 and not s.sizer.is_paused("MEANREV") and not bad_hour:
             p = sig["price"]
             if s.momentum_guard.should_block(sig["yes"]):
                 s.strats["MEANREV"] = f"momentum guard"
@@ -4642,7 +4862,7 @@ class Bot:
                             oid, actual_shares = s.ex.order(m, sig["yes"], p, sh)
                             if oid:
                                 t = Trd(datetime.now(timezone.utc), "MEANREV", m.slug, sig["dir"], p, sz, oid=oid)
-                                s.risk.open(t, market_end=m.end, actual_shares=actual_shares, entry_regime=s.trend.regime if s.trend else "UNKNOWN"); s.cd["mrev"] = time.time()
+                                s.risk.open(t, market_end=m.end, actual_shares=actual_shares, entry_regime=s.trend.regime if s.trend else "UNKNOWN"); s.cd[f"mrev:{slot_key}"] = time.time()
                                 if m.cid: s._traded_cids.add(m.cid); s._save_traded_cids()
                                 s.conviction.record_signal(m.slug, "MEANREV", sig["dir"])
                                 s._beep()
@@ -4655,7 +4875,7 @@ class Bot:
 
         # ── S4: FLASH (v8: order book aware + volatility gated) ──
         sig = s.s4.check(m, s.feed, s.trend, s.token_feed, s.book_intel)
-        if sig and flash_ok and not lat_isolate and time.time() - s.cd.get("flash", 0) > 60 and not s.sizer.is_paused("FLASH") and not bad_hour:
+        if sig and flash_ok and not lat_isolate and time.time() - s.cd.get(f"flash:{slot_key}", 0) > 60 and not s.sizer.is_paused("FLASH") and not bad_hour:
             p = sig["price"]
             if s.momentum_guard.should_block(sig["yes"]):
                 s.strats["FLASH"] = f"momentum guard"
@@ -4684,7 +4904,7 @@ class Bot:
                             oid, actual_shares = s.ex.order(m, sig["yes"], p, sh)
                             if oid:
                                 t = Trd(datetime.now(timezone.utc), "FLASH", m.slug, sig["dir"], p, sz, oid=oid)
-                                s.risk.open(t, market_end=m.end, actual_shares=actual_shares, entry_regime=s.trend.regime if s.trend else "UNKNOWN"); s.cd["flash"] = time.time()
+                                s.risk.open(t, market_end=m.end, actual_shares=actual_shares, entry_regime=s.trend.regime if s.trend else "UNKNOWN"); s.cd[f"flash:{slot_key}"] = time.time()
                                 if m.cid: s._traded_cids.add(m.cid); s._save_traded_cids()
                                 s.conviction.record_signal(m.slug, "FLASH", sig["dir"])
                                 s._beep()
@@ -4724,7 +4944,7 @@ class Bot:
                             oid, actual_shares = s.ex.order(m, sig["yes"], p, sh)
                             if oid:
                                 t = Trd(datetime.now(timezone.utc), "SQUEEZE", m.slug, sig["dir"], p, sz, oid=oid)
-                                s.risk.open(t, market_end=m.end, actual_shares=actual_shares, entry_regime=s.trend.regime if s.trend else "UNKNOWN"); s.cd["sqz"] = time.time()
+                                s.risk.open(t, market_end=m.end, actual_shares=actual_shares, entry_regime=s.trend.regime if s.trend else "UNKNOWN"); s.cd[f"sqz:{slot_key}"] = time.time()
                                 if m.cid: s._traded_cids.add(m.cid); s._save_traded_cids()
                                 s.conviction.record_signal(m.slug, "SQUEEZE", sig["dir"])
                                 s._beep()
