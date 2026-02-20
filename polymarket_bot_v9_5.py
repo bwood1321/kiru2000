@@ -2663,18 +2663,9 @@ class Executor:
             oid, shares = s._parse_resp(resp, label, dollar_amount, "TAKER-FOK")
             if oid: return oid, shares
         except Exception as e:
-            log.error(f"Taker FOK fail: {e}")
-        # Fallback: GTC limit 1c below (legacy behavior)
-        try:
-            maker_price = round(max(0.01, min(price - 0.01, 0.99)), 2)
-            limit_size = max(size, 5.0)
-            signed = s.client.create_order(OrderArgs(
-                price=maker_price, size=round(limit_size, 2), side=BUY, token_id=tid))
-            resp = s.client.post_order(signed, OrderType.GTC)
-            oid, shares = s._parse_resp(resp, label, maker_price * limit_size, "TAKER-FALLBACK-GTC")
-            if oid: return oid, 0
-        except Exception as e:
-            log.error(f"Taker fallback fail: {e}")
+            log.warning(f"Taker FOK fail: {e}")
+        # v9.5: Removed GTC fallback — it creates phantom orders that sit forever
+        # If FOK fails, the liquidity isn't there. Just skip.
         return None, None
 
     def _order_maker(s, tid, label, price, size, dollar_amount, timeout=30, retries=2):
@@ -5118,11 +5109,26 @@ class Bot:
 
 if __name__ == "__main__":
     # v9.5: Ensure crashes are always logged to file
-    import logging.handlers
+    import logging.handlers, signal
     crash_handler = logging.FileHandler("bot_crashes.log")
-    crash_handler.setLevel(logging.ERROR)
+    crash_handler.setLevel(logging.WARNING)  # Catch warnings too
     crash_handler.setFormatter(logging.Formatter("%(asctime)s|%(levelname)s|%(message)s"))
     log.addHandler(crash_handler)
+    
+    # v9.5: Catch external signals (SSH disconnect, kill, etc.)
+    def _signal_handler(signum, frame):
+        sig_name = signal.Signals(signum).name if hasattr(signal, 'Signals') else str(signum)
+        msg = f"Bot received signal {sig_name} ({signum}) — shutting down"
+        log.warning(msg)
+        try:
+            with open("bot_crashes.log", "a") as cf:
+                cf.write(f"\n{'='*60}\n{datetime.now()}\n{msg}\n")
+        except: pass
+        raise SystemExit(0)
+    
+    for sig in [signal.SIGTERM, signal.SIGHUP]:
+        try: signal.signal(sig, _signal_handler)
+        except: pass  # Some signals not available on all platforms
     
     # v9.4: Auto-restart loop for long-running stability
     restart_count = 0
@@ -5131,7 +5137,7 @@ if __name__ == "__main__":
         try:
             Bot().run()
             break  # clean exit (Ctrl+C)
-        except KeyboardInterrupt:
+        except (KeyboardInterrupt, SystemExit):
             print("\n  Shutting down cleanly...")
             break
         except Exception as e:
