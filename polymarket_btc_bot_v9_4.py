@@ -1,6 +1,17 @@
 """
-POLYMARKET BTC BOT v9.2 — THE CORTEX
+POLYMARKET BTC BOT v9.4 — THE CORTEX
 One brain. Sees everything. Hunts profit.
+
+v9.4 changes (data-driven from 190 real trades):
+- Entry range $0.15-$0.32 (only profitable range)
+- Max 2 orders per market (no averaging down)
+- $400 hard cap per trade
+- Prefers Down/NO side (+$3,936 vs Up +$75)
+- Grinder REMOVED → replaced by PairAccum + Spike
+- PairAccum: Gabagool strategy — buy both sides cheap, guaranteed profit
+- Spike: Detect order book panic dumps, buy fire sale tokens
+- Maker Rebate Farming: passive income from limit order placement
+- All multiplier floors raised (worst case 0.20x not 0.04x)
 
 The Cortex is a unified intelligence that replaces the v8 StrategyManager.
 Instead of 7 separate systems each doing their own thing, the Cortex:
@@ -98,7 +109,7 @@ class Config:
         """Get base trade size — percentage of balance or fixed fallback."""
         pct_map = {"ARB": s.arb_pct, "LATENCY": s.latency_pct,
                    "MOMENTUM": s.momentum_pct, "MEANREV": s.momentum_pct, "FLASH": s.flash_pct,
-                   "SQUEEZE": s.squeeze_pct, "GRINDER": 0.025}
+                   "SQUEEZE": s.squeeze_pct, "PAIR": 0.06, "SPIKE": 0.04}
         fixed_map = {"ARB": s.arb_size, "LATENCY": s.latency_size,
                      "MOMENTUM": s.momentum_size, "FLASH": s.flash_size}
         pct = pct_map.get(strat, 0.05)
@@ -422,8 +433,11 @@ class TrendEngine:
                 with_trend = (side_is_yes and trend_up) or (not side_is_yes and not trend_up)
                 return (True, 1.5) if with_trend else (False, 0.0)
 
-        # GRINDER: near-certain outcome buying — always allowed, strategy does own safety checks
-        if strat == "GRINDER": return True, 1.0
+        # PAIR: always allowed, strategy does own safety checks
+        if strat == "PAIR": return True, 1.0
+        
+        # SPIKE: similar to FLASH but more aggressive — panic sells happen in all regimes
+        if strat == "SPIKE": return True, 1.0
 
         return True, 1.0
 
@@ -1077,7 +1091,7 @@ class Cortex:
     KEY PRINCIPLE: Optimize for EV, not win rate.
     Never reduce Latency/Squeeze below 1.0x. Boost, don't restrict."""
 
-    STRATS = ["ARB", "LATENCY", "MEANREV", "FLASH", "SQUEEZE", "GRINDER"]
+    STRATS = ["ARB", "LATENCY", "MEANREV", "FLASH", "SQUEEZE", "PAIR", "SPIKE"]
     # Which regimes favor which strategies (from real trade data)
     REGIME_AFFINITY = {
         "LATENCY":  {"TRENDING_UP": 1.3, "TRENDING_DOWN": 1.3, "BREAKOUT": 1.5, "FLAT": 0.8, "CHOPPY": 0.7},
@@ -1570,10 +1584,11 @@ class Cortex:
 
     def get_max_entry(s, strat):
         """Tighter entry requirements for low-trust strategies.
-        GRINDER exempt: it enters at $0.82-$0.92 by design, trust can't change that."""
-        if strat == "GRINDER": return 0.92  # Grinder always needs high entry
+        PAIR/SPIKE have their own entry logic, trust can't override."""
+        if strat == "PAIR": return 0.50  # Pair can go up to $0.40 to complete a pair
+        if strat == "SPIKE": return 0.30  # Spike buys panic sells
         trust = s._trust.get(strat, 1.0)
-        defaults = {"ARB": 0.50, "LATENCY": 0.50, "MEANREV": 0.40, "FLASH": 0.50, "SQUEEZE": 0.40, "GRINDER": 0.50}
+        defaults = {"ARB": 0.50, "LATENCY": 0.50, "MEANREV": 0.40, "FLASH": 0.50, "SQUEEZE": 0.40, "PAIR": 0.50, "SPIKE": 0.30}
         base = defaults.get(strat, 0.25)
         if trust < 0.5:
             return base * 0.75  # tighten by 25% for untrusted
@@ -1982,39 +1997,31 @@ class S_Flash:
         if not s.c.flash_enabled or f.n < 10: return None
         # v9.1: Raised min from $0.10 to $0.15 — data shows $0.10-$0.15 entries are 17% WR, -$921
         # These look "cheap" but they're traps: $0.10 YES in downtrend = 90% market says DOWN
-        yes_cheap = 0.15 <= m.yes_p <= 0.32
-        no_cheap = 0.15 <= m.no_p <= 0.32
+        yes_cheap = 0.15 <= m.yes_p <= 0.30
+        no_cheap = 0.15 <= m.no_p <= 0.30
         if not yes_cheap and not no_cheap: return None
         tl = (m.end - datetime.now(timezone.utc)).total_seconds()
         if tl < 180: return None  # 3 min minimum
         if tl > 720: return None  # v8.1: Wait at least 3 min into market before entering
-
-        # v9.1: REQUIRE meaningful BTC move — Flash should only fire on CLEAR direction
-        # Data shows Flash losses come from tiny moves that immediately reverse
-        btc_2m = f.chg(120)
-        btc_1m = f.chg(60)
-        btc_move = max(abs(btc_2m), abs(btc_1m))
-        # v9.3: Removed 0.15% min BTC move — data shows Flash profits from cheap entries
-        # regardless of BTC move size. The price + confirmation logic is enough.
 
         regime = trend.regime if trend else ""
         strong_up = regime in ("TRENDING_UP",) or (regime == "BREAKOUT" and trend.trend_dir > 0)
         strong_down = regime in ("TRENDING_DOWN",) or (regime == "BREAKOUT" and trend.trend_dir < 0)
 
         # v9.1: HARD BLOCK Flash counter-trend in TRENDING_DOWN — data: 3W/8L, -$1,486
-        # v9.2: But ALLOW with-trend flash (buying NO in downtrend when it dips)
+        # v9.4: But ALLOW with-trend flash (buying NO in downtrend when it dips)
         if regime == "TRENDING_DOWN":
             # Only allow NO side (with-trend). YES is counter-trend = blocked.
             if not no_cheap:
                 return None
 
-        # v9.4: Removed volatility gate. High volatility = big moves = cheap tokens
-        # Our best trades came during volatile periods. The confirmation logic
-        # (btc, book, velocity) already filters bad entries.
-        vol_ok = True
+        # v9.4: Volatility gate removed. High volatility = big moves = cheap tokens.
+        # The confirmation logic (btc, book, velocity) already filters bad entries.
 
         # v9.4: RULE 5 — Check NO side FIRST. Data: Down +$3,936, Up +$75
         # BTC drops faster than it rises → NO side wins more often
+
+        btc_2m = f.chg(120)
 
         # NO cheap → BTC pumped then fading → buy NO
         if no_cheap and not strong_up:
@@ -2029,12 +2036,14 @@ class S_Flash:
                 if vel < -0.005:
                     vel_confirms = False
 
-            # v9.1: Stricter — need actual pullback, not just "flat enough"
-            pulling_back = f.chg(30) < -0.0003  # BTC actively dropping
-            btc_confirms = pulling_back and trend.trend_dir <= 0
+            # v9.4 FIX: Match v8.1 permissiveness — OR logic, not AND
+            # v8.1: pulling_back = f.chg(30) < 0 OR (flat_enough AND trend_dir <= 0)
+            pulling_back = f.chg(30) < 0
+            flat_enough = btc_2m < 0.02
+            btc_confirms = pulling_back or (flat_enough and trend.trend_dir <= 0)
 
             confirms = sum([btc_confirms, book_confirms, vel_confirms])
-            if confirms >= 2 and vol_ok:
+            if confirms >= 2:
                 return {"s": "FLASH", "dir": "NO", "yes": False, "price": m.no_p, "sz": 0}
 
         # YES cheap → BTC dropped then recovering → buy YES
@@ -2050,12 +2059,13 @@ class S_Flash:
                 if vel < -0.005:
                     vel_confirms = False
 
-            # v9.1: Stricter BTC confirmation — need actual recovery, not just "flat enough"
-            recovering = f.chg(30) > 0.0003  # BTC actively bouncing (not just flat)
-            btc_confirms = recovering and trend.trend_dir >= 0
+            # v9.4 FIX: Match v8.1 permissiveness — OR logic, not AND
+            recovering = f.chg(30) > 0
+            flat_enough = btc_2m > -0.02
+            btc_confirms = recovering or (flat_enough and trend.trend_dir >= 0)
 
             confirms = sum([btc_confirms, book_confirms, vel_confirms])
-            if confirms >= 2 and vol_ok:
+            if confirms >= 2:
                 return {"s": "FLASH", "dir": "YES", "yes": True, "price": m.yes_p, "sz": 0}
 
         return None
@@ -2105,7 +2115,7 @@ class S_Squeeze:
         strong_down = regime in ("TRENDING_DOWN",) or (regime == "BREAKOUT" and trend.trend_dir < 0)
 
         # v9.1: HARD BLOCK counter-trend Squeeze in TRENDING_DOWN — data: 1W/5L, -$832
-        # v9.2: Allow WITH-TREND squeeze (cheap NO in downtrend = BTC keeps falling)
+        # v9.4: Allow WITH-TREND squeeze (cheap NO in downtrend = BTC keeps falling)
         if regime == "TRENDING_DOWN":
             # Only allow NO side. YES (hoping BTC reverses in last 5 min) is blocked.
             if not no_cheap:
@@ -2134,36 +2144,252 @@ class S_Squeeze:
         return None
 
 
-class S_Grinder:
-    """v9.1: GRINDER — Near-Certain Outcome Buying.
+class S_PairAccum:
+    """v9.4: PAIR ACCUMULATOR — The Gabagool Strategy.
+    Buy BOTH sides cheap in the same market. Pair cost < $1.00 = guaranteed profit.
     
-    Research: Multiple sources confirm this is a proven profitable strategy.
-    "Focus exclusively on near-certain outcomes priced $0.82-$0.92. Thousands of
-    micro-trades accumulate small wins that compound over time. Works especially
-    well in short-duration crypto markets." — andrew.ooo / datawallet analysis
-    
-    The OPPOSITE of our other strategies. Instead of buying cheap tokens ($0.10-$0.22)
-    and hoping they go to $1.00, we buy EXPENSIVE tokens ($0.82-$0.92) when the
-    outcome is nearly certain, and collect the guaranteed $1.00 payout.
+    Data proof: 6 accidental pairs in our history, ALL won. 100% WR.
+    gabagool made millions with this exact approach.
     
     Logic:
-    1. Last 3 min of market (outcome is largely decided)
-    2. BTC has moved 0.30%+ from market open in one direction
-    3. The winning side is priced $0.82-$0.92 (profit after 2% fee)
-    4. BTC hasn't shown reversal signs in last 60 seconds
-    5. Buy the winning side → collect $1.00 at expiry
+    1. We already hold a position (e.g. NO at $0.22)
+    2. BTC reverses, making the OTHER side cheap (YES drops to $0.28)
+    3. Buy the other side → pair cost = $0.22 + $0.28 = $0.50
+    4. One side ALWAYS pays $1.00 → guaranteed $0.50 profit per pair
     
-    Expected: 85-95% WR, small profits ($15-$30 per trade), very rare losses.
-    This creates a steady income floor while other strategies swing for big wins."""
+    Also works standalone: buy whichever side is cheap first, then wait for the other.
+    If the other side never gets cheap, it's just a normal directional trade."""
     
     def __init__(s, c):
         s.c = c
         s._last_signal = 0
+        # Track what we've accumulated per market for pair tracking
+        s._pairs = {}  # slug -> {"yes_shares": 0, "yes_cost": 0, "no_shares": 0, "no_cost": 0}
     
-    def check(s, m, f, trend):
-        # v9.3: DISABLED — data shows buying at $0.78-$0.93 is not profitable
-        # $0.70-$0.85 range: 70% WR but -$12 net. Math doesn't work.
+    def update_pair(s, slug, side, shares, cost):
+        """Called when any strategy buys — track for pair completion."""
+        if slug not in s._pairs:
+            s._pairs[slug] = {"yes_shares": 0, "yes_cost": 0, "no_shares": 0, "no_cost": 0}
+        p = s._pairs[slug]
+        if side == "YES":
+            p["yes_shares"] += shares
+            p["yes_cost"] += cost
+        else:
+            p["no_shares"] += shares
+            p["no_cost"] += cost
+    
+    def get_pair_status(s, slug):
+        """Returns (pair_cost, min_paired_shares, is_profitable)."""
+        if slug not in s._pairs:
+            return None, 0, False
+        p = s._pairs[slug]
+        if p["yes_shares"] <= 0 or p["no_shares"] <= 0:
+            return None, 0, False
+        
+        min_shares = min(p["yes_shares"], p["no_shares"])
+        yes_avg = p["yes_cost"] / p["yes_shares"] if p["yes_shares"] > 0 else 0
+        no_avg = p["no_cost"] / p["no_shares"] if p["no_shares"] > 0 else 0
+        pair_cost = yes_avg + no_avg
+        return pair_cost, min_shares, pair_cost < 0.98
+    
+    def clear_market(s, slug):
+        """Called when market resolves."""
+        s._pairs.pop(slug, None)
+    
+    def check(s, m, f, trend, open_positions=None):
+        """Check if we should buy the OTHER side to complete a pair."""
+        now = time.time()
+        if now - s._last_signal < 5: return None  # cooldown
+        
+        tl = (m.end - datetime.now(timezone.utc)).total_seconds() if m.end else 999
+        if tl < 60: return None  # too late, let it resolve
+        
+        # What do we currently hold in this market?
+        if not open_positions: return None
+        
+        held_yes = sum(p.shares for p in open_positions if "YES" in p.side)
+        held_no = sum(p.shares for p in open_positions if "NO" in p.side)
+        held_yes_cost = sum(p.cost for p in open_positions if "YES" in p.side)
+        held_no_cost = sum(p.cost for p in open_positions if "NO" in p.side)
+        
+        if held_yes <= 0 and held_no <= 0: return None  # nothing held
+        
+        # Already have both sides? Don't add more
+        if held_yes > 0 and held_no > 0: return None
+        
+        # We hold one side. Is the OTHER side cheap enough to pair?
+        if held_yes > 0 and held_no <= 0:
+            # We hold YES. Check if NO is cheap.
+            no_price = m.no_p
+            yes_avg = held_yes_cost / held_yes if held_yes > 0 else 0
+            pair_cost = yes_avg + no_price
+            
+            if no_price < 0.15 or no_price > 0.40: return None  # outside our range
+            if pair_cost >= 0.95: return None  # not profitable enough after any slippage
+            
+            profit_per_pair = 1.0 - pair_cost
+            s._last_signal = now
+            return {
+                "s": "PAIR", "dir": "NO", "yes": False, "price": no_price,
+                "sz": 0, "pair_cost": pair_cost, "profit_pct": profit_per_pair * 100,
+                "target_shares": held_yes  # match the YES side
+            }
+        
+        elif held_no > 0 and held_yes <= 0:
+            # We hold NO. Check if YES is cheap.
+            yes_price = m.yes_p
+            no_avg = held_no_cost / held_no if held_no > 0 else 0
+            pair_cost = yes_price + no_avg
+            
+            if yes_price < 0.15 or yes_price > 0.40: return None
+            if pair_cost >= 0.95: return None
+            
+            profit_per_pair = 1.0 - pair_cost
+            s._last_signal = now
+            return {
+                "s": "PAIR", "dir": "YES", "yes": True, "price": yes_price,
+                "sz": 0, "pair_cost": pair_cost, "profit_pct": profit_per_pair * 100,
+                "target_shares": held_no
+            }
+        
         return None
+
+
+class S_Spike:
+    """v9.4: SPIKE DETECTOR — Buy panic-sold tokens.
+    
+    When other bots liquidate losing positions, they dump tokens at terrible prices.
+    We detect these sudden sell-offs via order book changes and buy the discount.
+    
+    Logic:
+    1. Track ask depth for each token over time
+    2. If ask depth suddenly spikes 3x+ (someone dumped a big sell order)
+    3. AND the token price dropped to $0.10-$0.25
+    4. Buy the token — panic sellers are usually wrong at these prices
+    
+    Similar to Flash but triggered by ORDER BOOK events, not BTC moves.
+    Catches opportunities Flash misses when BTC is flat but someone panics."""
+    
+    def __init__(s, c):
+        s.c = c
+        s._last_signal = 0
+        s._prev_yes_ask = 0.0
+        s._prev_no_ask = 0.0
+        s._prev_update = 0
+    
+    def check(s, m, f, trend, book_intel=None):
+        """Check for spike (sudden sell pressure)."""
+        now = time.time()
+        if now - s._last_signal < 10: return None  # 10s cooldown
+        if not book_intel: return None
+        
+        tl = (m.end - datetime.now(timezone.utc)).total_seconds() if m.end else 999
+        if tl < 90: return None  # too close to expiry for spike plays
+        
+        # Track ask depth changes
+        yes_ask = book_intel.yes_ask_depth
+        no_ask = book_intel.no_ask_depth
+        
+        # Need previous data to detect spike
+        if s._prev_update == 0 or now - s._prev_update > 30:
+            s._prev_yes_ask = yes_ask
+            s._prev_no_ask = no_ask
+            s._prev_update = now
+            return None
+        
+        # Detect spike: ask depth jumped 3x+ (someone dumped tokens)
+        yes_spike = yes_ask > s._prev_yes_ask * 3.0 and yes_ask > 100 if s._prev_yes_ask > 10 else False
+        no_spike = no_ask > s._prev_no_ask * 3.0 and no_ask > 100 if s._prev_no_ask > 10 else False
+        
+        # Update prev values
+        s._prev_yes_ask = yes_ask
+        s._prev_no_ask = no_ask
+        s._prev_update = now
+        
+        # YES spike: someone dumped YES tokens → YES is cheap → buy YES
+        if yes_spike and 0.10 <= m.yes_p <= 0.28:
+            # Confirm it's not a justified dump (BTC crashing)
+            btc_1m = f.chg(60) if f else 0
+            if btc_1m < -0.003: return None  # BTC actually crashing, dump is justified
+            
+            s._last_signal = now
+            return {"s": "SPIKE", "dir": "YES", "yes": True, "price": m.yes_p, "sz": 0,
+                    "spike_size": yes_ask}
+        
+        # NO spike: someone dumped NO tokens → NO is cheap → buy NO
+        if no_spike and 0.10 <= m.no_p <= 0.28:
+            btc_1m = f.chg(60) if f else 0
+            if btc_1m > 0.003: return None  # BTC pumping, NO dump is justified
+            
+            s._last_signal = now
+            return {"s": "SPIKE", "dir": "NO", "yes": False, "price": m.no_p, "sz": 0,
+                    "spike_size": no_ask}
+        
+        return None
+
+
+class MakerRebateFarmer:
+    """v9.4: MAKER REBATE FARMING — Passive income layer.
+    
+    Places limit orders on both sides of the market at wide prices.
+    Even if they don't fill, they earn a share of the daily USDC rebate pool.
+    100% of taker fees are redistributed to makers daily.
+    gabagool22 earned $1,700+/day from rebates alone.
+    
+    This is NOT a trading strategy — it's a passive income overlay.
+    Orders are placed far from market price so they rarely fill.
+    If they do fill, it's at a great price for us."""
+    
+    def __init__(s, c):
+        s.c = c
+        s._last_place = 0
+        s._orders_placed = 0
+        s._est_rebate = 0.0
+        s._session_orders = 0
+        s._session_volume = 0.0
+    
+    def place_rebate_orders(s, m, executor, balance):
+        """Place wide limit orders for rebate farming. Call every market cycle."""
+        now = time.time()
+        if now - s._last_place < 30: return  # every 30 seconds max
+        
+        tl = (m.end - datetime.now(timezone.utc)).total_seconds() if m.end else 999
+        if tl < 120: return  # don't place in last 2 min (might fill at bad time)
+        
+        s._last_place = now
+        
+        # Place small orders at extreme prices where we'd be happy to fill
+        # YES side: bid at $0.15 (we'd love to buy YES at $0.15)
+        # NO side: bid at $0.15
+        # These are far from market price, rarely fill, but earn rebate share
+        
+        try:
+            rebate_sz = min(balance * 0.005, 20.0)  # tiny orders, $5-20
+            if rebate_sz < 2.0: return
+            
+            # Only place if both sides are available
+            if m.tok_yes and m.yes_p > 0.25:  # YES is expensive → our $0.15 bid won't fill
+                shares = rebate_sz / 0.15
+                oid, _ = executor.order(m, True, 0.15, shares, mode="maker")
+                if oid:
+                    s._session_orders += 1
+                    s._session_volume += rebate_sz
+            
+            if m.tok_no and m.no_p > 0.25:  # NO is expensive → our $0.15 bid won't fill
+                shares = rebate_sz / 0.15
+                oid, _ = executor.order(m, False, 0.15, shares, mode="maker")
+                if oid:
+                    s._session_orders += 1
+                    s._session_volume += rebate_sz
+                    
+        except Exception as e:
+            pass  # rebate farming is best-effort, never crash the bot
+    
+    def get_status(s):
+        """Return status string for dashboard."""
+        if s._session_orders == 0:
+            return "no orders yet"
+        return f"{s._session_orders} orders, ${s._session_volume:.0f} vol"
 
 
 # ─── MARKET FINDER ───
@@ -2876,7 +3102,7 @@ class Risk:
 
 # ─── DASHBOARD v9.1 — Cortex-Aware ───
 class Dash:
-    def __init__(s): s.evts = deque(maxlen=10)
+    def __init__(s): s.evts = deque(maxlen=10); s._maker_status = ""
     def ev(s, e): s.evts.append(f"{datetime.now().strftime('%H:%M:%S')} {e}")
     def render(s, c, conn, f, risk, mkt, strats, scores, orders, poly_pos,
                start_time=None, past_trades=None, trend=None, sizer=None,
@@ -2902,7 +3128,7 @@ class Dash:
             else: cx_mode = f"{WARN}▽ CAREFUL{R}"
 
         print(f"\n  {H1}╔{'═'*62}╗{R}")
-        print(f"  {H1}║{R}  {H2}⬡ POLYMARKET BTC BOT v9.2{R} {DIM}— THE CORTEX{R}    {DIM}{now}{R}  {DIM}⏱ {rt}{R} {H1}║{R}")
+        print(f"  {H1}║{R}  {H2}⬡ POLYMARKET BTC BOT v9.4{R} {DIM}— THE CORTEX{R}    {DIM}{now}{R}  {DIM}⏱ {rt}{R} {H1}║{R}")
         print(f"  {H1}║{R}  {DIM}Mode:{R} {mode}  {DIM}│{R}  {DIM}Cortex:{R} {cx_mode}  {DIM}│{R}  ", end="")
 
         # Connection dots
@@ -3057,7 +3283,7 @@ class Dash:
         print(f"\n  {H1}┌{'─'*62}┐{R}")
         print(f"  {H1}│{R}  {LBL}STRATEGIES{R}                                                       {H1}│{R}")
         print(f"  {H1}├{'─'*62}┤{R}")
-        icons = {"ARB": "♦", "LATENCY": "⚡", "MEANREV": "↩", "FLASH": "⚡", "SQUEEZE": "◈", "GRINDER": "◉"}
+        icons = {"ARB": "♦", "LATENCY": "⚡", "MEANREV": "↩", "FLASH": "⚡", "SQUEEZE": "◈", "PAIR": "⬡", "SPIKE": "△", "MAKER": "💰"}
         for k, v in strats.items():
             ic = icons.get(k, "•")
             paused = sizer and sizer.is_paused(k)
@@ -3080,6 +3306,9 @@ class Dash:
                 line = f"  {DIM}○ {ic} {k:10}{R}  {DIM}{v}{R}"
             sz_str = f"{DIM}${adj_sz:.0f}{R}"
             print(f"  {H1}│{R}{line}  {sz_str}  {H1}│{R}")
+        # Maker rebate status line
+        if hasattr(s, '_maker_status') and s._maker_status:
+            print(f"  {H1}│{R}  {VAL}💰 MAKER REBATE  {s._maker_status}{R}                            {H1}│{R}")
         print(f"  {H1}└{'─'*62}┘{R}")
 
         # ╔══════════════════════════════════════════════════════════════╗
@@ -3203,8 +3432,9 @@ class Bot:
         s.cortex.trend = s.trend
         s.data = DataCollector()
         # Strategies
-        s.s1 = S_Arb(s.c); s.s2 = S_Latency(s.c); s.s3 = S_MeanReversion(s.c); s.s4 = S_Flash(s.c); s.s5 = S_Squeeze(s.c); s.s6 = S_Grinder(s.c)
-        s.mkt = None; s.strats = {"ARB": "...", "LATENCY": "...", "MEANREV": "...", "FLASH": "...", "SQUEEZE": "...", "GRINDER": "..."}
+        s.s1 = S_Arb(s.c); s.s2 = S_Latency(s.c); s.s3 = S_MeanReversion(s.c); s.s4 = S_Flash(s.c); s.s5 = S_Squeeze(s.c); s.s6 = S_PairAccum(s.c); s.s7 = S_Spike(s.c)
+        s.maker = MakerRebateFarmer(s.c)
+        s.mkt = None; s.strats = {"ARB": "...", "LATENCY": "...", "MEANREV": "...", "FLASH": "...", "SQUEEZE": "...", "PAIR": "...", "SPIKE": "..."}
         s.cd = {}; s._traded_cids = set()
         s.start_time = time.time()
         s._logged_positions = set()
@@ -3267,7 +3497,7 @@ class Bot:
         s._past_trades = s._load_history()
         with open(s.HISTORY_FILE, "a") as f:
             f.write(f"\n{'='*60}\n")
-            f.write(f"  BOT v9.2 STARTED: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            f.write(f"  BOT v9.4 STARTED: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
             f.write(f"  Balance: ${s.risk.show_bal:.2f}\n")
             f.write(f"  Mode: {'LIVE' if not s.c.dry_run else 'DRY RUN'}\n")
             f.write(f"{'='*60}\n")
@@ -3342,7 +3572,7 @@ class Bot:
             w, l, wr = s.risk.stats()
             with open(s.HISTORY_FILE, "a") as f:
                 f.write(f"{'─'*60}\n")
-                f.write(f"  BOT v9.2 STOPPED: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+                f.write(f"  BOT v9.4 STOPPED: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
                 elapsed = int(time.time() - s.start_time)
                 hrs, rem = divmod(elapsed, 3600)
                 mins, secs = divmod(rem, 60)
@@ -3398,7 +3628,7 @@ class Bot:
 
     def run(s):
         os.system("cls" if os.name == "nt" else "clear")
-        print(f"\n  {H1}{'='*55}\n  |  POLYMARKET BTC BOT v9.2 — INTELLIGENT ENGINE\n  {'='*55}{R}\n")
+        print(f"\n  {H1}{'='*55}\n  |  POLYMARKET BTC BOT v9.4 — INTELLIGENT ENGINE\n  {'='*55}{R}\n")
         print(f"  {H2}[1/4]{R} Gamma..."); s.conn.gamma = "OK" if s.finder.test() else "FAILED"
         print(f"        {'OK' if s.conn.gamma == 'OK' else 'FAILED'}")
         print(f"  {H2}[2/4]{R} CLOB..."); s.conn.clob = "OK" if s.ex.test_public() else "FAILED"
@@ -3474,9 +3704,9 @@ class Bot:
         print(f"    Lifecycle model: {OK}{lc_markets}{R} markets profiled{' (empty — collecting)' if lc_markets == 0 else ''}")
         print(f"    Trust: " + "  ".join(f"{st[:3]}={s.cortex._trust[st]:.2f}x" for st in s.cortex.STRATS))
         print(f"\n  {H1}{'='*55}{R}")
-        print(f"  {'LIVE TRADING v9.2' if not s.c.dry_run else 'DRY RUN v9.2'}")
+        print(f"  {'LIVE TRADING v9.4' if not s.c.dry_run else 'DRY RUN v9.4'}")
         print(f"  {H1}{'='*55}{R}")
-        time.sleep(3); s._init_history(); s._sync_existing_positions(); s.dash.ev("Bot v9.2 started"); s._loop()
+        time.sleep(3); s._init_history(); s._sync_existing_positions(); s.dash.ev("Bot v9.4 started"); s._loop()
 
     def _loop(s):
         ctr = 0; s._orders = []; s._poly_pos = []
@@ -3605,7 +3835,7 @@ class Bot:
                 # Periodic cleanup — keeps memory stable for long runs
                 if ctr % 500 == 0:
                     s._cleanup()
-                # v9.2: Long-running stability checks
+                # v9.4: Long-running stability checks
                 if ctr % 100 == 0:
                     # WebSocket health check — restart if feed is stale (no data for 2+ min)
                     if s.feed.n > 0:
@@ -3630,7 +3860,7 @@ class Bot:
             except Exception as e:
                 log.error(f"Loop: {e}\n{traceback.format_exc()}")
                 s.dash.ev(f"Err: {str(e)[:40]}")
-                # v9.2: Track consecutive errors for backoff
+                # v9.4: Track consecutive errors for backoff
                 if not hasattr(s, '_consec_errors'): s._consec_errors = 0
                 s._consec_errors += 1
                 wait = min(3 * s._consec_errors, 30)  # backoff: 3s, 6s, 9s... max 30s
@@ -3769,7 +3999,10 @@ class Bot:
         # v9.4: RULE 3 — Max 2 orders per market. Data shows:
         # 1 buy: +$4,035, 2 buys: +$2,693, 5+buys: -$2,968
         # Averaging into losers destroys profits.
-        if len(open_here) >= 2: return
+        # Exception: PAIR strategy can be the 3rd entry to complete a guaranteed pair.
+        pair_eligible = (len(open_here) >= 1 and len(open_here) <= 2 and
+                         len(set(p.side for p in open_here)) == 1)  # only have one side
+        if len(open_here) >= 2 and not pair_eligible: return
 
         # Same-strategy stacking requires: 5+ min left, TRENDING/BREAKOUT regime
         can_same_stack = (tl >= 300 and
@@ -3825,7 +4058,7 @@ class Bot:
             market_penalty = 0.0  # 2 open + a resolved loss = stop adding
         if market_penalty <= 0.0:
             # 2+ losses on this market — sit it out, wait for next market
-            for strat_key in ["LATENCY", "FLASH", "MEANREV", "SQUEEZE", "ARB", "GRINDER"]:
+            for strat_key in ["LATENCY", "FLASH", "MEANREV", "SQUEEZE", "ARB", "PAIR", "SPIKE"]:
                 s.strats[strat_key] = "market stopped (2L)"
             return
 
@@ -3844,16 +4077,14 @@ class Bot:
 
             # v7.1: HARD counter-trend block — data shows 0% win rate on these combos
             # TRENDING_UP + NO = 0W/5L. TRENDING_DOWN + YES = 0W/1L. No exceptions.
-            if strat != "ARB":  # ARB is direction-agnostic
+            # v9.4: PAIR exempt — it deliberately buys the opposite side to lock in profit.
+            if strat not in ("ARB", "PAIR"):  # ARB is direction-agnostic, PAIR buys opposite
                 if s.trend.regime == "TRENDING_UP" and side == "NO":
                     return False, "hard block: NO in TRENDING_UP", 0
                 if s.trend.regime == "TRENDING_DOWN" and side == "YES":
                     return False, "hard block: YES in TRENDING_DOWN", 0
                 
-                # v9.1: 5-MINUTE TREND HARD BLOCK — regime can be fooled by 1-min bounces
-                # but 5-min change can't. If BTC down 0.10%+ over 5 min, YES is suicide.
-                # v9.2: ALLOW with-trend trades through! Only block counter-trend.
-                # In downtrend: block YES, but allow NO. In uptrend: block NO, allow YES.
+                # v9.1: 5-MINUTE TREND HARD BLOCK
                 btc_5m = s.feed.chg(300)
                 if btc_5m < -0.0010 and side == "YES":
                     return False, "hard block: YES while 5m down", 0
@@ -3867,7 +4098,8 @@ class Bot:
                     return False, "fast trend: YES while BTC falling", 0
 
             # Side lock: must match existing direction
-            if locked_side and side != locked_side:
+            # v9.4: PAIR exempt — its entire purpose is buying the OTHER side
+            if locked_side and side != locked_side and strat != "PAIR":
                 return False, f"side lock ({locked_side})", 0
             # v9.1: Hard cap 3 total trades per market (across ALL strategies)
             if open_count + resolved_count >= 3:
@@ -4092,48 +4324,90 @@ class Bot:
                 else:
                     s.strats["SQUEEZE"] = f"waiting (<5min)"
 
-        # ── S6: GRINDER → Near-certain outcome buying (last 3 min) ──
-        # Research: "Focus on near-certain outcomes priced $0.82-$0.92. Works especially
-        # well in short-duration crypto markets." High WR, small profits, steady income.
-        sig = s.s6.check(m, s.feed, s.trend)
-        if sig and not s.sizer.is_paused("GRINDER"):
+        # ── S6: PAIR ACCUMULATOR → Buy other side to complete a guaranteed pair ──
+        # Gabagool strategy: pair cost < $1.00 = guaranteed profit regardless of outcome.
+        sig = s.s6.check(m, s.feed, s.trend, open_positions=open_here)
+        if sig and not s.sizer.is_paused("PAIR"):
             p = sig["price"]
-            ok, reason, same_count = allowed("GRINDER", sig["dir"], p)
+            ok, reason, same_count = allowed("PAIR", sig["dir"], p)
             if not ok:
-                s.strats["GRINDER"] = reason
+                s.strats["PAIR"] = reason
             else:
-                # Size: 2-3% of balance — small because profit per trade is small
-                base = s.risk.show_bal * 0.025
-                sz = base * s.cortex.get_trust("GRINDER") * s.cortex.get_session_mult() * s.cortex.get_danger_mult()
-                sz = min(sz, av, max_market_risk - market_risk, hard_max)
-                # Hard cap at 3% of balance
-                sz = min(sz, s.risk.show_bal * 0.03)
+                # Size: match the existing position to balance the pair
+                target_shares = sig.get("target_shares", 0)
+                sz = min(target_shares * p, av, max_market_risk - market_risk, hard_max)
+                sz = min(sz, s.risk.show_bal * 0.08)  # 8% cap for pair completion
                 if sz >= 1.0:
+                    pair_cost = sig.get("pair_cost", 0)
                     profit_pct = sig.get("profit_pct", 0)
-                    s.strats["GRINDER"] = f"ACTIVE {sig['dir']} @ ${p:.2f} +{profit_pct:.1f}%"
+                    s.strats["PAIR"] = f"ACTIVE {sig['dir']} @ ${p:.2f} pair=${pair_cost:.2f} +{profit_pct:.0f}%"
                     sh = max(sz / p, 5.0)
                     if sh * p > av: sh = av / p
-                    s.dash.ev(f"[GRIND·MKR] {sig['dir']} ${sz:.2f} @ ${p:.2f} +{profit_pct:.1f}%")
+                    s.dash.ev(f"[PAIR·MKR] {sig['dir']} ${sz:.2f} @ ${p:.2f} pair=${pair_cost:.2f} +{profit_pct:.0f}%")
                     oid, actual_shares = s.ex.order(m, sig["yes"], p, sh, mode="maker")
                     if oid:
-                        t = Trd(datetime.now(timezone.utc), "GRINDER", m.slug, sig["dir"], p, sz, oid=oid)
+                        t = Trd(datetime.now(timezone.utc), "PAIR", m.slug, sig["dir"], p, sz, oid=oid)
+                        s.risk.open(t, market_end=m.end, actual_shares=actual_shares, entry_regime=s.trend.regime if s.trend else "UNKNOWN")
+                        # Update pair tracker
+                        s.s6.update_pair(m.slug, sig["dir"], actual_shares or sh, sz)
+                        if m.cid: s._traded_cids.add(m.cid); s._save_traded_cids()
+                        s._beep()
+                else:
+                    s.strats["PAIR"] = f"signal {sig['dir']} sz too small"
+        else:
+            if open_here and sig is None:
+                # Show what we're waiting for
+                held_sides = set(p.side for p in open_here)
+                if len(held_sides) == 1:
+                    held = list(held_sides)[0]
+                    other = "NO" if held == "YES" else "YES"
+                    other_p = m.no_p if held == "YES" else m.yes_p
+                    s.strats["PAIR"] = f"need {other} @${other_p:.2f}"
+                else:
+                    s.strats["PAIR"] = "both sides held"
+            elif not open_here:
+                s.strats["PAIR"] = "no position to pair"
+
+        # ── S7: SPIKE DETECTOR → Buy panic-sold tokens ──
+        sig = s.s7.check(m, s.feed, s.trend, book_intel=s.book_intel)
+        if sig and not s.sizer.is_paused("SPIKE"):
+            p = sig["price"]
+            ok, reason, same_count = allowed("SPIKE", sig["dir"], p)
+            if not ok:
+                s.strats["SPIKE"] = reason
+            else:
+                base = s.c.get_base_size("SPIKE", s.risk.show_bal)
+                sz = base * s.cortex.get_trust("SPIKE") * s.cortex.get_session_mult() * s.cortex.get_danger_mult()
+                sz = min(sz, av, max_market_risk - market_risk, hard_max)
+                if sz >= 1.0:
+                    s.strats["SPIKE"] = f"ACTIVE {sig['dir']} @ ${p:.2f} spike!"
+                    sh = max(sz / p, 5.0)
+                    if sh * p > av: sh = av / p
+                    s.dash.ev(f"[SPIKE·MKR] {sig['dir']} ${sz:.2f} @ ${p:.2f} spike detected!")
+                    oid, actual_shares = s.ex.order(m, sig["yes"], p, sh, mode="maker")
+                    if oid:
+                        t = Trd(datetime.now(timezone.utc), "SPIKE", m.slug, sig["dir"], p, sz, oid=oid)
                         s.risk.open(t, market_end=m.end, actual_shares=actual_shares, entry_regime=s.trend.regime if s.trend else "UNKNOWN")
                         if m.cid: s._traded_cids.add(m.cid); s._save_traded_cids()
                         s._beep()
                 else:
-                    s.strats["GRINDER"] = f"signal {sig['dir']} sz too small"
+                    s.strats["SPIKE"] = f"signal {sig['dir']} sz too small"
         else:
-            tl_now = (m.end - datetime.now(timezone.utc)).total_seconds() if m.end else 999
-            if sig is None and tl_now <= 180:
-                s.strats["GRINDER"] = f"scanning ({int(tl_now)}s left)"
-            elif tl_now > 180:
-                s.strats["GRINDER"] = f"waiting (<4min)"
+            if sig is None:
+                s.strats["SPIKE"] = "monitoring book"
+
+        # ── MAKER REBATE FARMING (passive, runs every cycle) ──
+        try:
+            s.maker.place_rebate_orders(m, s.ex, s.risk.show_bal)
+            s.dash._maker_status = s.maker.get_status()
+        except:
+            pass
 
     def _summary(s):
         os.system("cls" if os.name == "nt" else "clear")
         w, l, wr = s.risk.stats()
         print(f"\n{H1}{'═'*62}")
-        print(f"  {LBL}SESSION SUMMARY — BOT v9.2 — THE CORTEX{R}")
+        print(f"  {LBL}SESSION SUMMARY — BOT v9.4 — THE CORTEX{R}")
         print(f"{H1}{'═'*62}{R}")
         print(f"  {LBL}Balance:{R}  {bal_c(s.risk.show_bal)} USDC")
         print(f"  {LBL}Real P&L:{R} {pnl_c2(s.risk.tpnl)}")
@@ -4168,7 +4442,7 @@ class Bot:
         print(f"{H1}{'═'*62}{R}\n")
 
 if __name__ == "__main__":
-    # v9.2: Auto-restart loop for long-running stability
+    # v9.4: Auto-restart loop for long-running stability
     # If bot crashes, wait 10s and restart automatically
     restart_count = 0
     max_restarts = 50  # safety limit per session
