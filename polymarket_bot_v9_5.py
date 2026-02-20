@@ -2511,10 +2511,16 @@ class Finder:
     def find(s, asset="btc", timeframe=15):
         now = datetime.now(timezone.utc)
         interval = timeframe  # 5 or 15
+        cache_key = f"{asset}-{timeframe}m"
+        # v9.5: Check cache FIRST — avoid unnecessary API calls
+        # 5 slots × 4 offsets = 20 API calls per cycle without this
+        cached = s.cache.get(cache_key)
+        if cached:
+            tl = (cached.end - now).total_seconds()
+            if tl > 30 and cached.active: return cached
         mb = (now.minute // interval) * interval
         base = now.replace(minute=mb, second=0, microsecond=0)
         offsets = [0, -interval, interval, -interval*2]
-        cache_key = f"{asset}-{timeframe}m"
         for off in offsets:
             ts = int((base + timedelta(minutes=off)).timestamp())
             slug = f"{asset}-updown-{timeframe}m-{ts}"
@@ -2522,10 +2528,6 @@ class Finder:
             if m and m.active:
                 tl = (m.end - now).total_seconds()
                 if tl > 30: s.cache[cache_key] = m; return m
-        cached = s.cache.get(cache_key)
-        if cached:
-            tl = (cached.end - now).total_seconds()
-            if tl > 30 and cached.active: return cached
         return None
     def _get(s, slug, asset="btc", timeframe=15):
         try:
@@ -4078,7 +4080,11 @@ class Bot:
                             except: pass
                             # Context switch and trade
                             s._set_slot_context(slot)
-                            if s.conn.can_trade or s.c.dry_run: s._trade(m)
+                            try:
+                                if s.conn.can_trade or s.c.dry_run: s._trade(m)
+                            except Exception as e:
+                                log.error(f"Trade error on {slot_key}: {e}")
+                                s.dash.ev(f"Trade err: {slot_key}")
                 if ctr % 30 == 0 and s.ex.authed:
                     rb = s.ex.get_balance()
                     if rb: s.risk.set_real(rb)
@@ -4113,14 +4119,27 @@ class Bot:
                                     feed.poll()
                     import gc
                     gc.collect()
-                s.dash.render(s.c, s.conn, s.feeds.get("btc", s.feed), s.risk, s.mkt, s.strats, s.s3.scores,
-                    s._orders, s._poly_pos, s.start_time, s._past_trades,
-                    s.trends.get("btc", s.trend), s.sizer,
-                    cortex=s.cortex, poly_ws=s.poly_ws,
-                    slot_markets=s._slot_markets, feeds=s.feeds, active_slot=s._active_slot)
+                try:
+                    s.dash.render(s.c, s.conn, s.feeds.get("btc", s.feed), s.risk, s.mkt, s.strats, s.s3.scores,
+                        s._orders, s._poly_pos, s.start_time, s._past_trades,
+                        s.trends.get("btc", s.trend), s.sizer,
+                        cortex=s.cortex, poly_ws=s.poly_ws,
+                        slot_markets=s._slot_markets, feeds=s.feeds, active_slot=s._active_slot)
+                except Exception as e:
+                    log.debug(f"Dashboard render error: {e}")
                 time.sleep(s.c.poll_sec)
             except KeyboardInterrupt:
-                s.ex.cancel_all(); s._auto_redeem(); s._close_history(); s.cortex._save_lifecycle(); s._summary(); break
+                try: s.ex.cancel_all()
+                except: pass
+                try: s._auto_redeem()
+                except: pass
+                try: s._close_history()
+                except: pass
+                try: s.cortex._save_lifecycle()
+                except: pass
+                try: s._summary()
+                except: pass
+                break
             except Exception as e:
                 log.error(f"Loop: {e}\n{traceback.format_exc()}")
                 s.dash.ev(f"Err: {str(e)[:40]}")
@@ -4645,7 +4664,7 @@ class Bot:
         if len(open_here) >= 2 and not pair_eligible: return
 
         # Same-strategy stacking requires: 5+ min left, TRENDING/BREAKOUT regime
-        can_same_stack = (tl >= 300 and
+        can_same_stack = (tl >= 300 and s.trend and
                           s.trend.regime in ("TRENDING_UP", "TRENDING_DOWN", "BREAKOUT"))
 
         # ── v9.5: CROSS-SLOT DIRECTION LIMITER ──
@@ -4704,6 +4723,9 @@ class Bot:
         # v7.2: Hard max size cap — no single trade exceeds 10% of balance
         # This catches multiplier stacking (trend * conviction * streak * tod)
         hard_max = min(s.risk.show_bal * 0.10, 400)  # v9.4: $400 hard cap. Data: $150-400 = +$3,121, $400+ = -$41
+        # v9.5: Recovery mode halves the cap too — prevents multiplier chain from overriding recovery
+        if s.risk.show_bal < s.c.recovery_target:
+            hard_max = min(hard_max, 200)
 
         # v8: Per-market loss limit — reduce or block after losses on this market
         market_penalty = s.market_losses.get_penalty(m.slug)
@@ -4719,7 +4741,7 @@ class Bot:
         # v8.1: FAST TREND SAFETY — catches trends before the regime engine does
         # If BTC moved 0.15%+ in last 2 min, block buying the opposite side
         # This would have prevented 4 of 7 losses on Feb 16 night session
-        btc_2m = s.feed.chg(120)
+        btc_2m = s.feed.chg(120) if s.feed else 0
         fast_trend_up = btc_2m > 0.0015    # BTC up 0.15%+ in 2 min
         fast_trend_down = btc_2m < -0.0015  # BTC down 0.15%+ in 2 min
 
@@ -5095,8 +5117,14 @@ class Bot:
         print(f"{H1}{'═'*62}{R}\n")
 
 if __name__ == "__main__":
+    # v9.5: Ensure crashes are always logged to file
+    import logging.handlers
+    crash_handler = logging.FileHandler("bot_crashes.log")
+    crash_handler.setLevel(logging.ERROR)
+    crash_handler.setFormatter(logging.Formatter("%(asctime)s|%(levelname)s|%(message)s"))
+    log.addHandler(crash_handler)
+    
     # v9.4: Auto-restart loop for long-running stability
-    # If bot crashes, wait 10s and restart automatically
     restart_count = 0
     max_restarts = 50  # safety limit per session
     while restart_count < max_restarts:
@@ -5104,10 +5132,17 @@ if __name__ == "__main__":
             Bot().run()
             break  # clean exit (Ctrl+C)
         except KeyboardInterrupt:
+            print("\n  Shutting down cleanly...")
             break
         except Exception as e:
             restart_count += 1
-            log.error(f"Bot crashed (restart #{restart_count}): {e}\n{traceback.format_exc()}")
+            crash_msg = f"Bot crashed (restart #{restart_count}): {e}\n{traceback.format_exc()}"
+            log.error(crash_msg)
+            # Also write to dedicated crash file in case main log fails
+            try:
+                with open("bot_crashes.log", "a") as cf:
+                    cf.write(f"\n{'='*60}\n{datetime.now()}\n{crash_msg}\n")
+            except: pass
             print(f"\n  ⚠ Bot crashed: {str(e)[:60]}")
             print(f"  ⟳ Auto-restarting in 10s... (restart #{restart_count}/{max_restarts})")
             time.sleep(10)
