@@ -1482,6 +1482,10 @@ class Cortex:
         s._lifecycle_data.append(profile)
         s._current_snapshot = {}
 
+        # Keep memory bounded
+        if len(s._lifecycle_data) > 500:
+            s._lifecycle_data = s._lifecycle_data[-500:]
+
         # Rebuild probability tables every 10 markets
         if len(s._lifecycle_data) % 10 == 0:
             s._rebuild_lifecycle_probs()
@@ -2328,78 +2332,58 @@ class S_Spike:
         return None
 
 
+
+# ─── MARKET FINDER ───
 class MakerRebateFarmer:
     """v9.4: MAKER REBATE FARMING — Passive income layer.
-    
-    Places limit orders on both sides of the market at wide prices.
-    Even if they don't fill, they earn a share of the daily USDC rebate pool.
-    100% of taker fees are redistributed to makers daily.
-    
-    CRITICAL: Uses fire-and-forget orders (mode="rebate") that return instantly.
-    Normal maker orders block for 30-60 seconds waiting for fills — that would
-    freeze the dashboard and miss trading opportunities. Rebate orders just sit
-    on the book until the market ends."""
+    Uses fire-and-forget orders (mode="rebate") that return instantly."""
     
     def __init__(s, c):
         s.c = c
         s._last_place = 0
         s._session_orders = 0
         s._session_volume = 0.0
-        s._active_orders = []  # track placed order IDs for cleanup
+        s._active_orders = []
         s._current_slug = None
     
     def place_rebate_orders(s, m, executor, balance):
         """Place wide limit orders for rebate farming. NON-BLOCKING."""
         now = time.time()
-        if now - s._last_place < 60: return  # once per minute max (was 30s, too aggressive)
-        
+        if now - s._last_place < 60: return
         tl = (m.end - datetime.now(timezone.utc)).total_seconds() if m.end else 999
-        if tl < 120: return  # don't place in last 2 min
-        
-        # If market changed, reset tracking
+        if tl < 120: return
         if m.slug != s._current_slug:
             s._active_orders = []
             s._current_slug = m.slug
-        
-        # Don't stack too many rebate orders
-        if len(s._active_orders) >= 4: return  # max 4 outstanding rebate orders
-        
+        if len(s._active_orders) >= 4: return
         s._last_place = now
-        
         try:
-            rebate_sz = min(balance * 0.003, 15.0)  # smaller: $3-15 (was $5-20)
+            rebate_sz = min(balance * 0.003, 15.0)
             if rebate_sz < 2.0: return
-            
-            # Place at $0.12 — far enough from market to rarely fill
             rebate_price = 0.12
-            
-            if m.tok_yes and m.yes_p > 0.30:  # YES expensive → our bid is safe
+            if m.tok_yes and m.yes_p > 0.30:
                 shares = rebate_sz / rebate_price
                 oid, _ = executor.order(m, True, rebate_price, shares, mode="rebate")
                 if oid:
                     s._session_orders += 1
                     s._session_volume += rebate_sz
                     s._active_orders.append(oid)
-            
-            if m.tok_no and m.no_p > 0.30:  # NO expensive → our bid is safe
+            if m.tok_no and m.no_p > 0.30:
                 shares = rebate_sz / rebate_price
                 oid, _ = executor.order(m, False, rebate_price, shares, mode="rebate")
                 if oid:
                     s._session_orders += 1
                     s._session_volume += rebate_sz
                     s._active_orders.append(oid)
-                    
-        except Exception as e:
-            pass  # rebate farming is best-effort, never crash the bot
+        except:
+            pass
     
     def get_status(s):
-        """Return status string for dashboard."""
         if s._session_orders == 0:
             return "no orders yet"
         return f"{s._session_orders} orders, ${s._session_volume:.0f} vol, {len(s._active_orders)} active"
 
 
-# ─── MARKET FINDER ───
 class Finder:
     def __init__(s, c):
         s.c = c; s.s = requests.Session(); s.s.headers["User-Agent"] = "PolyBot/7"; s.cache = {}
@@ -2524,7 +2508,7 @@ class Executor:
         except: pass
         return None
     def order(s, market, is_yes, price, size, mode="taker"):
-        """Place an order. Modes: 'taker' (FOK), 'maker' (GTC limit), 'hybrid' (try maker, fallback taker), 'rebate' (fire-and-forget GTC).
+        """Place an order. Modes: 'taker' (FOK), 'maker' (GTC limit), 'hybrid' (try maker, fallback taker).
         Returns (order_id, actual_shares) or (None, None) on failure."""
         from py_clob_client.clob_types import MarketOrderArgs, OrderArgs, OrderType
         from py_clob_client.order_builder.constants import BUY
@@ -2641,9 +2625,7 @@ class Executor:
         return None, None
 
     def _order_rebate(s, tid, label, price, size):
-        """Fire-and-forget GTC order for rebate farming. NO BLOCKING.
-        Places order and returns immediately — doesn't wait for fill.
-        These orders sit on the book earning rebate share until market ends."""
+        """Fire-and-forget GTC order for rebate farming. NO BLOCKING."""
         from py_clob_client.clob_types import OrderArgs, OrderType
         from py_clob_client.order_builder.constants import BUY
         try:
@@ -3235,11 +3217,10 @@ class Dash:
             print(f"  {H2}│{R}  {LBL}Macro{R}  {bias_str}   {LBL}Markets{R} {outcome_str}                  {H2}│{R}")
 
             # Danger zone + session
-            dz = f"{ERR}⚠ DANGER{R}" if cortex._in_danger else f"{OK}CLEAR{R}"
             sm = cortex.get_session_mult()
             sm_str = f"{OK}{sm:.1f}x{R}" if sm >= 1.0 else f"{WARN}{sm:.1f}x{R}"
             
-            print(f"  {H2}│{R}  {LBL}Zone{R}   {dz}       {LBL}Session{R} {sm_str}                            {H2}│{R}")
+            print(f"  {H2}│{R}  {LBL}Session{R} {sm_str}                                                {H2}│{R}")
             
             # v9.1: Side bias
             y_m, n_m = cortex._side_mult["YES"], cortex._side_mult["NO"]
@@ -3263,10 +3244,8 @@ class Dash:
             # v9.1: Data collection summary
             cortex_total = sum(len(v) for v in cortex._trades.values())
             regime_combos = len(cortex._regime_perf)
-            dz_count = len([z for z, d in cortex._loss_zones.items() if d['losses'] >= 3])
             data_parts = [f"{cortex_total}t"]
             if regime_combos > 0: data_parts.append(f"{regime_combos}rgm")
-            if dz_count > 0: data_parts.append(f"{dz_count}dz")
             if lc_n > 0: data_parts.append(f"{lc_n}lc")
             data_str = " ".join(data_parts)
             print(f"  {H2}│{R}  {LBL}Data{R}   {DIM}{data_str}{R}                                          {H2}│{R}")
@@ -3315,7 +3294,7 @@ class Dash:
         print(f"\n  {H1}┌{'─'*62}┐{R}")
         print(f"  {H1}│{R}  {LBL}STRATEGIES{R}                                                       {H1}│{R}")
         print(f"  {H1}├{'─'*62}┤{R}")
-        icons = {"ARB": "♦", "LATENCY": "⚡", "MEANREV": "↩", "FLASH": "⚡", "SQUEEZE": "◈", "PAIR": "⬡", "SPIKE": "△", "MAKER": "💰"}
+        icons = {"ARB": "♦", "LATENCY": "⚡", "MEANREV": "↩", "FLASH": "⚡", "SQUEEZE": "◈", "PAIR": "⬡", "SPIKE": "△"}
         for k, v in strats.items():
             ic = icons.get(k, "•")
             paused = sizer and sizer.is_paused(k)
@@ -3338,10 +3317,9 @@ class Dash:
                 line = f"  {DIM}○ {ic} {k:10}{R}  {DIM}{v}{R}"
             sz_str = f"{DIM}${adj_sz:.0f}{R}"
             print(f"  {H1}│{R}{line}  {sz_str}  {H1}│{R}")
-        # Maker rebate status line
-        if hasattr(s, '_maker_status') and s._maker_status:
-            print(f"  {H1}│{R}  {VAL}💰 MAKER REBATE  {s._maker_status}{R}                            {H1}│{R}")
         print(f"  {H1}└{'─'*62}┘{R}")
+        if hasattr(s, '_maker_status') and s._maker_status:
+            print(f"  {DIM}  💰 MAKER REBATE: {s._maker_status}{R}")
 
         # ╔══════════════════════════════════════════════════════════════╗
         #  OPEN POSITIONS
@@ -3464,8 +3442,7 @@ class Bot:
         s.cortex.trend = s.trend
         s.data = DataCollector()
         # Strategies
-        s.s1 = S_Arb(s.c); s.s2 = S_Latency(s.c); s.s3 = S_MeanReversion(s.c); s.s4 = S_Flash(s.c); s.s5 = S_Squeeze(s.c); s.s6 = S_PairAccum(s.c); s.s7 = S_Spike(s.c)
-        s.maker = MakerRebateFarmer(s.c)
+        s.s1 = S_Arb(s.c); s.s2 = S_Latency(s.c); s.s3 = S_MeanReversion(s.c); s.s4 = S_Flash(s.c); s.s5 = S_Squeeze(s.c); s.s6 = S_PairAccum(s.c); s.s7 = S_Spike(s.c); s.maker = MakerRebateFarmer(s.c)
         s.mkt = None; s.strats = {"ARB": "...", "LATENCY": "...", "MEANREV": "...", "FLASH": "...", "SQUEEZE": "...", "PAIR": "...", "SPIKE": "..."}
         s.cd = {}; s._traded_cids = set()
         s.start_time = time.time()
@@ -3713,7 +3690,6 @@ class Bot:
         print(f"    {H2}v9.1 THE CORTEX:{R}")
         print(f"    Unified Brain: {OK}Active{R} (replaces Manager — EV-based trust, not win rate)")
         print(f"    Macro Bias: {OK}Active{R} (cross-market momentum from last 12 outcomes)")
-        print(f"    Danger Zones: {OK}Active{R} (avoids BTC price levels with loss history)")
         print(f"    Session P&L: {OK}Active{R} (adapts aggression based on session performance)")
         print(f"    Regime Matching: {OK}Active{R} (learns which strat+regime combos work)")
         print(f"    Pattern Discovery: {OK}Active{R} (scans for correlations every 10 trades)")
@@ -3727,12 +3703,10 @@ class Bot:
         # v9.1: Show actual data loaded
         cortex_trades = sum(len(v) for v in s.cortex._trades.values())
         regime_combos = len(s.cortex._regime_perf)
-        danger_zones = len([z for z, d in s.cortex._loss_zones.items() if d['losses'] >= 3])
         lc_markets = len(s.cortex._lifecycle_data)
         print(f"\n  {H2}Intelligence Data:{R}")
         print(f"    Trade history: {OK}{len(s.sizer.history)}{R} trades → Cortex: {OK}{cortex_trades}{R} scored")
         print(f"    Regime map: {OK}{regime_combos}{R} strat×regime combos learned")
-        print(f"    Danger zones: {OK}{danger_zones}{R} BTC price zones flagged")
         print(f"    Lifecycle model: {OK}{lc_markets}{R} markets profiled{' (empty — collecting)' if lc_markets == 0 else ''}")
         print(f"    Trust: " + "  ".join(f"{st[:3]}={s.cortex._trust[st]:.2f}x" for st in s.cortex.STRATS))
         print(f"\n  {H1}{'='*55}{R}")
@@ -3962,6 +3936,22 @@ class Bot:
             cid_list = list(s._traded_cids)
             s._traded_cids = set(cid_list[-50:])
             s._save_traded_cids()
+
+        # 5. Trim _past_trades (dashboard display only)
+        if len(s._past_trades) > 100:
+            s._past_trades = s._past_trades[-100:]
+
+        # 6. Clean old _market_trades entries (markets that resolved long ago)
+        if hasattr(s.cortex, '_market_trades') and len(s.cortex._market_trades) > 20:
+            slugs = list(s.cortex._market_trades.keys())
+            for slug in slugs[:-20]:
+                del s.cortex._market_trades[slug]
+
+        # 7. Clean PairAccum tracker
+        if hasattr(s, 's6') and hasattr(s.s6, '_pairs') and len(s.s6._pairs) > 20:
+            keys = list(s.s6._pairs.keys())
+            for k in keys[:-20]:
+                del s.s6._pairs[k]
 
         if removed > 0:
             log.debug(f"Cleanup: removed {removed} old positions, {len(stale_keys)} stale confirms")
@@ -4428,7 +4418,7 @@ class Bot:
             if sig is None:
                 s.strats["SPIKE"] = "monitoring book"
 
-        # ── MAKER REBATE FARMING (passive, runs every cycle) ──
+        # (maker rebate — passive income from limit orders)
         try:
             s.maker.place_rebate_orders(m, s.ex, s.risk.show_bal)
             s.dash._maker_status = s.maker.get_status()
@@ -4457,10 +4447,6 @@ class Bot:
             print(f"    {st:10} {tag} ({n} trades)")
         print(f"    Macro bias: {s.cortex._macro_bias} ({s.cortex._macro_strength:.0%})")
         print(f"    Session: {s.cortex._session_trades}t, {pnl_c2(s.cortex._session_pnl)}")
-        if s.cortex._loss_zones:
-            worst = sorted(s.cortex._loss_zones.items(), key=lambda x: x[1]["losses"], reverse=True)[:3]
-            zones = ", ".join(f"${z[0]:,}" for z in worst if z[1]["losses"] >= 2)
-            if zones: print(f"    Danger zones: {zones}")
         print(f"  {LBL}Sizing:{R}   {s.sizer.display_str()}")
         csv_stats = s.data.get_stats()
         if csv_stats.get("total", 0) > 0:
