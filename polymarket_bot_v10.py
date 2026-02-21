@@ -41,13 +41,14 @@ Built on v8.1 proven architecture (5 strategies, 16 risk protections).
 
 pip install py-clob-client python-dotenv requests numpy colorama web3
 """
-import os, sys, time, json, logging, traceback, math
+import os, sys, time, json, logging, traceback, math, socket
 from datetime import datetime, timedelta, timezone
 from dataclasses import dataclass, field
 from collections import deque
 from typing import Optional
 import requests, numpy as np
 from dotenv import load_dotenv
+import concurrent.futures
 load_dotenv()
 
 try:
@@ -3953,6 +3954,9 @@ class Bot:
         except Exception as e: log.debug(f"Position sync error: {e}")
 
     def run(s):
+        # v10.1: CRITICAL — set global socket timeout to prevent CLOB API hangs
+        # Without this, ANY Polymarket API call can hang the entire bot forever
+        socket.setdefaulttimeout(10)  # 10 seconds max for any socket operation
         os.system("cls" if os.name == "nt" else "clear")
         print(f"\n  {H1}{'='*55}\n  |  POLYMARKET BOT v10.1 — BTC FOCUSED\n  |  BTC 5m + 15m | Backtest-Optimized\n  {'='*55}{R}\n")
         print(f"  {H2}[1/4]{R} Gamma..."); s.conn.gamma = "OK" if s.finder.test() else "FAILED"
@@ -4057,12 +4061,39 @@ class Bot:
 
     def _loop(s):
         ctr = 0; s._orders = []; s._poly_pos = []
+        s._last_trade_call = time.time()  # v10.1: watchdog timer
         while True:
             try:
                 # v9.4: Poll ALL asset feeds every tick
                 for asset in s._asset_list:
                     s.feeds[asset].poll()
                 ctr += 1
+                
+                # v10.1: WATCHDOG — detect if _trade() hasn't been called
+                if ctr % 30 == 0:
+                    silence = time.time() - s._last_trade_call
+                    if silence > 120:
+                        log.warning(f"v10WATCHDOG: _trade() not called for {silence:.0f}s! Clearing stale markets...")
+                        # Force clear ALL slot markets so finder rediscovers them
+                        for sk, sl in s.slot_state.items():
+                            sm = sl.get("market")
+                            if sm:
+                                tl = (sm.end - datetime.now(timezone.utc)).total_seconds()
+                                if tl < 30:
+                                    log.warning(f"v10WATCHDOG: clearing stale {sk} (tl={tl:.0f}s)")
+                                    sl["market"] = None
+                                    s._slot_markets[sk] = None
+                                    s.finder.cache.pop(sk, None)
+                
+                # v10.1: Clear expired markets EVERY TICK (not just on finder cycle)
+                for sk, sl in s.slot_state.items():
+                    sm = sl.get("market")
+                    if sm:
+                        tl = (sm.end - datetime.now(timezone.utc)).total_seconds()
+                        if tl < -10:  # expired more than 10s ago
+                            sl["market"] = None
+                            s._slot_markets[sk] = None
+                            s.finder.cache.pop(sk, None)
                 # v9.4: Update ALL trend engines
                 for asset in s._asset_list:
                     s.trends[asset].update(s.feeds[asset])
@@ -4225,10 +4256,26 @@ class Bot:
                             slot_status[sk] = "NO MARKET"
                     log.warning(f"v10STALL NO TRADEABLE MARKETS: {slot_status}")
                 if ctr % 30 == 0 and s.ex.authed:
-                    rb = s.ex.get_balance()
-                    if rb: s.risk.set_real(rb)
-                    s._orders = s.ex.get_open_orders()
-                    s._poly_pos = s.ex.get_positions()
+                    # v10.1: Run CLOB API calls in a thread with 8s timeout
+                    # These calls have NO built-in timeout and can hang FOREVER,
+                    # freezing the entire bot. This is THE root cause of stalling.
+                    def _fetch_account_data():
+                        rb = s.ex.get_balance()
+                        orders = s.ex.get_open_orders()
+                        positions = s.ex.get_positions()
+                        return rb, orders, positions
+                    try:
+                        if not hasattr(s, '_api_pool'):
+                            s._api_pool = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+                        future = s._api_pool.submit(_fetch_account_data)
+                        rb, orders, positions = future.result(timeout=8)
+                        if rb: s.risk.set_real(rb)
+                        s._orders = orders
+                        s._poly_pos = positions
+                    except concurrent.futures.TimeoutError:
+                        log.warning("v10HANG: CLOB API hung on balance/orders check (>8s) — skipping")
+                    except Exception as e:
+                        log.debug(f"Account data fetch error: {e}")
                 # v7: Smart redeem — after wins or every 3 min (was every 90 ticks)
                 should_redeem = (
                     not s.c.dry_run and s._traded_cids and (
@@ -4237,7 +4284,15 @@ class Bot:
                     )
                 )
                 if should_redeem:
-                    s._auto_redeem()
+                    # v10.1: Redeem in thread with timeout — also calls CLOB API
+                    try:
+                        if not hasattr(s, '_api_pool'):
+                            s._api_pool = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+                        future = s._api_pool.submit(s._auto_redeem)
+                        future.result(timeout=10)
+                    except concurrent.futures.TimeoutError:
+                        log.warning("v10HANG: auto_redeem hung (>10s) — skipping")
+                    except: pass
                     if s._last_win_market and time.time() - s._last_win_market < 30:
                         s._last_win_market = None  # only trigger once per win
                 # Periodic cleanup — keeps memory stable for long runs
@@ -4727,29 +4782,27 @@ class Bot:
             log.debug(f"Cleanup: removed {removed} old positions, {len(stale_keys)} stale confirms")
 
     def _trade(s, m):
-        if not s.risk.ok(): return
-        tl = (m.end - datetime.now(timezone.utc)).total_seconds()
-        duration = m.timeframe * 60  # 300 for 5m, 900 for 15m
-        min_tl = 30 if m.timeframe == 5 else 90  # 30s for 5m, 90s for 15m
-        if tl < min_tl: return
-        av = s.risk.available
-        if av < 1.0: return
-
-        # v10: DEBUG — log strategy state every 60 seconds
-        _debug_key = f"_last_debug_{m.slug}"
+        # v10.1: WATCHDOG — record that _trade was called
+        s._last_trade_call = time.time()
+        
+        # v10.1: HEARTBEAT — log every 60s BEFORE any early returns
+        # This is how we know _trade() is being called even if nothing trades
         if not hasattr(s, '_debug_times'): s._debug_times = {}
-        if time.time() - s._debug_times.get(_debug_key, 0) > 60:
-            s._debug_times[_debug_key] = time.time()
+        _hb_key = f"_hb_{m.slug}"
+        if time.time() - s._debug_times.get(_hb_key, 0) > 60:
+            s._debug_times[_hb_key] = time.time()
+            tl_now = (m.end - datetime.now(timezone.utc)).total_seconds()
+            av_now = s.risk.available
             cl_div = abs(s.feed.price_divergence) if s.feed.cl_price > 0 else -1
             cl_age = s.feed.cl_age if hasattr(s.feed, 'cl_age') else -1
             btc_chg = s.feed.chg(60) * 100 if s.feed.n > 10 else 0
             chg_open = ((s.feed.price - m.open_btc) / m.open_btc * 100) if m.open_btc > 0 and s.feed.price > 0 else 0
             log.info(f"v10DBG {m.asset}-{m.timeframe}m Y={m.yes_p:.2f} N={m.no_p:.2f} "
-                     f"sum={m.yes_p+m.no_p:.3f} tl={tl:.0f}s av=${av:.0f} "
+                     f"sum={m.yes_p+m.no_p:.3f} tl={tl_now:.0f}s av=${av_now:.0f} "
                      f"BTC=${s.feed.price:,.0f} chg1m={btc_chg:+.2f}% open={chg_open:+.3f}% "
                      f"cl_div={cl_div:.4f} cl_age={cl_age:.0f}s")
         
-        # v10: ALIVE LOG — every 5 min, show comprehensive status
+        # v10.1: ALIVE LOG — every 5 min, comprehensive status
         _alive_key = "_last_alive"
         if not hasattr(s, '_alive_time'): s._alive_time = 0
         if time.time() - s._alive_time > 300:
@@ -4761,6 +4814,14 @@ class Bot:
             log.info(f"v10ALIVE bal=${s.risk.show_bal:.0f} open={open_trades} "
                      f"total={total_trades} W={wins} L={losses} "
                      f"BTC=${s.feed.price:,.0f} session_pnl=${s.cortex._session_pnl:+.0f}")
+        
+        if not s.risk.ok(): return
+        tl = (m.end - datetime.now(timezone.utc)).total_seconds()
+        duration = m.timeframe * 60  # 300 for 5m, 900 for 15m
+        min_tl = 30 if m.timeframe == 5 else 90  # 30s for 5m, 90s for 15m
+        if tl < min_tl: return
+        av = s.risk.available
+        if av < 1.0: return
 
         # v10: Chainlink divergence — reduce size but DON'T zero out
         # Stale Chainlink (30+ min old) shouldn't prevent ALL trading
