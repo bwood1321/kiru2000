@@ -1,0 +1,2590 @@
+{
+  "config": {
+    "days": 30,
+    "bet": 50.0,
+    "markets": 5160
+  },
+  "A1_cheap_15-30": {
+    "trades": 8,
+    "wins": 2,
+    "losses": 6,
+    "wr": 25.0,
+    "pnl": -60.91954022988503,
+    "roi": -15.229885057471257,
+    "trade_list": [
+      {
+        "side": "NO",
+        "price": 0.3,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1392369",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.3,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1392368",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.28,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1377713",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.29,
+        "result": "WIN",
+        "pnl": 122.41379310344828,
+        "market": "1376432",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.3,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1374096",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.3,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1369816",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.29,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1359036",
+        "mtype": "15m"
+      },
+      {
+        "side": "NO",
+        "price": 0.3,
+        "result": "WIN",
+        "pnl": 116.66666666666669,
+        "market": "1355166",
+        "mtype": "15m"
+      }
+    ]
+  },
+  "A2_lowmid_30-45": {
+    "trades": 95,
+    "wins": 41,
+    "losses": 54,
+    "wr": 43.15789473684211,
+    "pnl": 32.09862008367233,
+    "roi": 0.6757604228141544,
+    "trade_list": [
+      {
+        "side": "YES",
+        "price": 0.45,
+        "result": "WIN",
+        "pnl": 61.111111111111114,
+        "market": "1398968",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.44,
+        "result": "WIN",
+        "pnl": 63.63636363636364,
+        "market": "1398882",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.45,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1397597",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.45,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1397467",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.45,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1396439",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.44,
+        "result": "WIN",
+        "pnl": 63.63636363636364,
+        "market": "1395476",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.38,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1395469",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.45,
+        "result": "WIN",
+        "pnl": 61.111111111111114,
+        "market": "1392434",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.34,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1392369",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.45,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1392368",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.44,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1392362",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.44,
+        "result": "WIN",
+        "pnl": 63.63636363636364,
+        "market": "1392271",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.42,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1392263",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.45,
+        "result": "WIN",
+        "pnl": 61.111111111111114,
+        "market": "1390528",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.45,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1389806",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.44,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1389306",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.42,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1388213",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.44,
+        "result": "WIN",
+        "pnl": 63.63636363636364,
+        "market": "1387362",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.35,
+        "result": "WIN",
+        "pnl": 92.85714285714286,
+        "market": "1386992",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.35,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1386490",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.42,
+        "result": "WIN",
+        "pnl": 69.04761904761905,
+        "market": "1386129",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.45,
+        "result": "WIN",
+        "pnl": 61.111111111111114,
+        "market": "1385585",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.44,
+        "result": "WIN",
+        "pnl": 63.63636363636364,
+        "market": "1384806",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.45,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1383150",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.43,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1383043",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.45,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1382226",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.42,
+        "result": "WIN",
+        "pnl": 69.04761904761905,
+        "market": "1380876",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.4,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1379424",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.41,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1377713",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.39,
+        "result": "WIN",
+        "pnl": 78.2051282051282,
+        "market": "1377412",
+        "mtype": "5m"
+      }
+    ]
+  },
+  "A3_mid_38-55": {
+    "trades": 755,
+    "wins": 402,
+    "losses": 353,
+    "wr": 53.24503311258278,
+    "pnl": 187.3693826563718,
+    "roi": 0.4963427355135677,
+    "trade_list": [
+      {
+        "side": "YES",
+        "price": 0.55,
+        "result": "WIN",
+        "pnl": 40.90909090909091,
+        "market": "1399704",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.55,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1399635",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.52,
+        "result": "WIN",
+        "pnl": 46.153846153846146,
+        "market": "1399631",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.5,
+        "result": "WIN",
+        "pnl": 50.0,
+        "market": "1399362",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.52,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1399328",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.52,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1399138",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.55,
+        "result": "WIN",
+        "pnl": 40.90909090909091,
+        "market": "1399126",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.55,
+        "result": "WIN",
+        "pnl": 40.90909090909091,
+        "market": "1399122",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.55,
+        "result": "WIN",
+        "pnl": 40.90909090909091,
+        "market": "1399104",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.54,
+        "result": "WIN",
+        "pnl": 42.59259259259258,
+        "market": "1399017",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.55,
+        "result": "WIN",
+        "pnl": 40.90909090909091,
+        "market": "1398991",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.54,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1398987",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.55,
+        "result": "WIN",
+        "pnl": 40.90909090909091,
+        "market": "1398968",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.55,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1398886",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.53,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1398882",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.55,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1398866",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.55,
+        "result": "WIN",
+        "pnl": 40.90909090909091,
+        "market": "1398858",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.55,
+        "result": "WIN",
+        "pnl": 40.90909090909091,
+        "market": "1398855",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.54,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1398834",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.54,
+        "result": "WIN",
+        "pnl": 42.59259259259258,
+        "market": "1398700",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.54,
+        "result": "WIN",
+        "pnl": 42.59259259259258,
+        "market": "1398557",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.55,
+        "result": "WIN",
+        "pnl": 40.90909090909091,
+        "market": "1398431",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.53,
+        "result": "WIN",
+        "pnl": 44.339622641509436,
+        "market": "1398413",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.55,
+        "result": "WIN",
+        "pnl": 40.90909090909091,
+        "market": "1398412",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.55,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1397963",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.51,
+        "result": "WIN",
+        "pnl": 48.0392156862745,
+        "market": "1397949",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.55,
+        "result": "WIN",
+        "pnl": 40.90909090909091,
+        "market": "1397944",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.53,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1397930",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.55,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1397844",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.54,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1397835",
+        "mtype": "5m"
+      }
+    ]
+  },
+  "A4_highmid_45-58": {
+    "trades": 1124,
+    "wins": 602,
+    "losses": 522,
+    "wr": 53.55871886120996,
+    "pnl": -2244.208100327903,
+    "roi": -3.993252847558546,
+    "trade_list": [
+      {
+        "side": "NO",
+        "price": 0.57,
+        "result": "WIN",
+        "pnl": 37.71929824561404,
+        "market": "1399784",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.58,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1399726",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.58,
+        "result": "WIN",
+        "pnl": 36.20689655172414,
+        "market": "1399710",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.56,
+        "result": "WIN",
+        "pnl": 39.28571428571428,
+        "market": "1399704",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.58,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1399635",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.58,
+        "result": "WIN",
+        "pnl": 36.20689655172414,
+        "market": "1399631",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.58,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1399625",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.58,
+        "result": "WIN",
+        "pnl": 36.20689655172414,
+        "market": "1399621",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.58,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1399616",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.58,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1399384",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.58,
+        "result": "WIN",
+        "pnl": 36.20689655172414,
+        "market": "1399362",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.58,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1399328",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.58,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1399231",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.58,
+        "result": "WIN",
+        "pnl": 36.20689655172414,
+        "market": "1399186",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.58,
+        "result": "WIN",
+        "pnl": 36.20689655172414,
+        "market": "1399143",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.52,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1399138",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.58,
+        "result": "WIN",
+        "pnl": 36.20689655172414,
+        "market": "1399126",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.58,
+        "result": "WIN",
+        "pnl": 36.20689655172414,
+        "market": "1399122",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.58,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1399114",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.57,
+        "result": "WIN",
+        "pnl": 37.71929824561404,
+        "market": "1399104",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.57,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1399071",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.58,
+        "result": "WIN",
+        "pnl": 36.20689655172414,
+        "market": "1399017",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.56,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1399014",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.58,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1399005",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.58,
+        "result": "WIN",
+        "pnl": 36.20689655172414,
+        "market": "1398998",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.58,
+        "result": "WIN",
+        "pnl": 36.20689655172414,
+        "market": "1398991",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.58,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1398987",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.58,
+        "result": "WIN",
+        "pnl": 36.20689655172414,
+        "market": "1398968",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.58,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1398886",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.56,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1398882",
+        "mtype": "5m"
+      }
+    ]
+  },
+  "B1_open_only": {
+    "trades": 784,
+    "wins": 419,
+    "losses": 365,
+    "wr": 53.443877551020414,
+    "pnl": 347.8013028692611,
+    "roi": 0.887248221605258,
+    "trade_list": [
+      {
+        "side": "YES",
+        "price": 0.55,
+        "result": "WIN",
+        "pnl": 40.90909090909091,
+        "market": "1399704",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.55,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1399635",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.52,
+        "result": "WIN",
+        "pnl": 46.153846153846146,
+        "market": "1399631",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.5,
+        "result": "WIN",
+        "pnl": 50.0,
+        "market": "1399362",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.52,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1399328",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.52,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1399138",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.54,
+        "result": "WIN",
+        "pnl": 42.59259259259258,
+        "market": "1399133",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.55,
+        "result": "WIN",
+        "pnl": 40.90909090909091,
+        "market": "1399126",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.55,
+        "result": "WIN",
+        "pnl": 40.90909090909091,
+        "market": "1399122",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.55,
+        "result": "WIN",
+        "pnl": 40.90909090909091,
+        "market": "1399104",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.54,
+        "result": "WIN",
+        "pnl": 42.59259259259258,
+        "market": "1399017",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.55,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1399005",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.55,
+        "result": "WIN",
+        "pnl": 40.90909090909091,
+        "market": "1398991",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.54,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1398987",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.55,
+        "result": "WIN",
+        "pnl": 40.90909090909091,
+        "market": "1398968",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.55,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1398886",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.53,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1398882",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.55,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1398866",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.55,
+        "result": "WIN",
+        "pnl": 40.90909090909091,
+        "market": "1398858",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.55,
+        "result": "WIN",
+        "pnl": 40.90909090909091,
+        "market": "1398855",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.54,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1398834",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.54,
+        "result": "WIN",
+        "pnl": 42.59259259259258,
+        "market": "1398700",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.54,
+        "result": "WIN",
+        "pnl": 42.59259259259258,
+        "market": "1398557",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.55,
+        "result": "WIN",
+        "pnl": 40.90909090909091,
+        "market": "1398431",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.53,
+        "result": "WIN",
+        "pnl": 44.339622641509436,
+        "market": "1398413",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.55,
+        "result": "WIN",
+        "pnl": 40.90909090909091,
+        "market": "1398412",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.55,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1397963",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.47,
+        "result": "WIN",
+        "pnl": 56.382978723404264,
+        "market": "1397949",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.55,
+        "result": "WIN",
+        "pnl": 40.90909090909091,
+        "market": "1397944",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.53,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1397930",
+        "mtype": "5m"
+      }
+    ]
+  },
+  "B2_strong_open": {
+    "trades": 323,
+    "wins": 165,
+    "losses": 158,
+    "wr": 51.08359133126935,
+    "pnl": -444.52142574422703,
+    "roi": -2.7524546485710655,
+    "trade_list": [
+      {
+        "side": "YES",
+        "price": 0.55,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1399362",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.54,
+        "result": "WIN",
+        "pnl": 42.59259259259258,
+        "market": "1399017",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.54,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1398987",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.55,
+        "result": "WIN",
+        "pnl": 40.90909090909091,
+        "market": "1398968",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.54,
+        "result": "WIN",
+        "pnl": 42.59259259259258,
+        "market": "1398882",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.55,
+        "result": "WIN",
+        "pnl": 40.90909090909091,
+        "market": "1398858",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.55,
+        "result": "WIN",
+        "pnl": 40.90909090909091,
+        "market": "1398855",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.55,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1397844",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.54,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1397830",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.55,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1397826",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.55,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1397759",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.55,
+        "result": "WIN",
+        "pnl": 40.90909090909091,
+        "market": "1397737",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.52,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1397609",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.55,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1397597",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.55,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1397504",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.55,
+        "result": "WIN",
+        "pnl": 40.90909090909091,
+        "market": "1397499",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.55,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1397467",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.55,
+        "result": "WIN",
+        "pnl": 40.90909090909091,
+        "market": "1395476",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.43,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1395469",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.54,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1393379",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.54,
+        "result": "WIN",
+        "pnl": 42.59259259259258,
+        "market": "1393367",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.53,
+        "result": "WIN",
+        "pnl": 44.339622641509436,
+        "market": "1393327",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.54,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1393142",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.48,
+        "result": "WIN",
+        "pnl": 54.16666666666667,
+        "market": "1392434",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.55,
+        "result": "WIN",
+        "pnl": 40.90909090909091,
+        "market": "1392430",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.55,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1392428",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.39,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1392369",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.55,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1392368",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.48,
+        "result": "WIN",
+        "pnl": 54.16666666666667,
+        "market": "1392362",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.55,
+        "result": "WIN",
+        "pnl": 40.90909090909091,
+        "market": "1392271",
+        "mtype": "5m"
+      }
+    ]
+  },
+  "B3_full_momentum": {
+    "trades": 348,
+    "wins": 178,
+    "losses": 170,
+    "wr": 51.14942528735632,
+    "pnl": -506.33872178903266,
+    "roi": -2.9099926539599577,
+    "trade_list": [
+      {
+        "side": "YES",
+        "price": 0.55,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1399635",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.55,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1399362",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.52,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1399328",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.55,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1398968",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.55,
+        "result": "WIN",
+        "pnl": 40.90909090909091,
+        "market": "1398886",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.54,
+        "result": "WIN",
+        "pnl": 42.59259259259258,
+        "market": "1398882",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.55,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1398858",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.54,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1398834",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.53,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1398700",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.55,
+        "result": "WIN",
+        "pnl": 40.90909090909091,
+        "market": "1398412",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.51,
+        "result": "WIN",
+        "pnl": 48.0392156862745,
+        "market": "1397949",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.55,
+        "result": "WIN",
+        "pnl": 40.90909090909091,
+        "market": "1397944",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.55,
+        "result": "WIN",
+        "pnl": 40.90909090909091,
+        "market": "1397830",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.53,
+        "result": "WIN",
+        "pnl": 44.339622641509436,
+        "market": "1397621",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.55,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1397609",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.49,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1397597",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.54,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1397468",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.55,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1397245",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.54,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1396824",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.55,
+        "result": "WIN",
+        "pnl": 40.90909090909091,
+        "market": "1395117",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.53,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1394937",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.55,
+        "result": "WIN",
+        "pnl": 40.90909090909091,
+        "market": "1394871",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.55,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1393934",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.55,
+        "result": "WIN",
+        "pnl": 40.90909090909091,
+        "market": "1393667",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.55,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1393486",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.55,
+        "result": "WIN",
+        "pnl": 40.90909090909091,
+        "market": "1393379",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.55,
+        "result": "WIN",
+        "pnl": 40.90909090909091,
+        "market": "1393191",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.54,
+        "result": "WIN",
+        "pnl": 42.59259259259258,
+        "market": "1393186",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.48,
+        "result": "WIN",
+        "pnl": 54.16666666666667,
+        "market": "1392434",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.55,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1392371",
+        "mtype": "5m"
+      }
+    ]
+  },
+  "B4_open_plus_2m": {
+    "trades": 742,
+    "wins": 393,
+    "losses": 349,
+    "wr": 52.96495956873315,
+    "pnl": 39.21732859025447,
+    "roi": 0.10570708514893387,
+    "trade_list": [
+      {
+        "side": "YES",
+        "price": 0.55,
+        "result": "WIN",
+        "pnl": 40.90909090909091,
+        "market": "1399704",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.55,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1399635",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.52,
+        "result": "WIN",
+        "pnl": 46.153846153846146,
+        "market": "1399631",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.5,
+        "result": "WIN",
+        "pnl": 50.0,
+        "market": "1399362",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.52,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1399328",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.52,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1399138",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.55,
+        "result": "WIN",
+        "pnl": 40.90909090909091,
+        "market": "1399126",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.55,
+        "result": "WIN",
+        "pnl": 40.90909090909091,
+        "market": "1399122",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.55,
+        "result": "WIN",
+        "pnl": 40.90909090909091,
+        "market": "1399104",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.54,
+        "result": "WIN",
+        "pnl": 42.59259259259258,
+        "market": "1399017",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.55,
+        "result": "WIN",
+        "pnl": 40.90909090909091,
+        "market": "1398991",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.54,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1398987",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.55,
+        "result": "WIN",
+        "pnl": 40.90909090909091,
+        "market": "1398968",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.55,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1398886",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.53,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1398882",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.55,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1398866",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.55,
+        "result": "WIN",
+        "pnl": 40.90909090909091,
+        "market": "1398858",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.55,
+        "result": "WIN",
+        "pnl": 40.90909090909091,
+        "market": "1398855",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.54,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1398834",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.54,
+        "result": "WIN",
+        "pnl": 42.59259259259258,
+        "market": "1398700",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.54,
+        "result": "WIN",
+        "pnl": 42.59259259259258,
+        "market": "1398557",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.55,
+        "result": "WIN",
+        "pnl": 40.90909090909091,
+        "market": "1398431",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.53,
+        "result": "WIN",
+        "pnl": 44.339622641509436,
+        "market": "1398413",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.55,
+        "result": "WIN",
+        "pnl": 40.90909090909091,
+        "market": "1398412",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.55,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1397963",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.51,
+        "result": "WIN",
+        "pnl": 48.0392156862745,
+        "market": "1397949",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.55,
+        "result": "WIN",
+        "pnl": 40.90909090909091,
+        "market": "1397944",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.53,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1397930",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.55,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1397844",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.54,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1397835",
+        "mtype": "5m"
+      }
+    ]
+  },
+  "C1_book_filter": {
+    "trades": 0,
+    "wins": 0,
+    "losses": 0,
+    "wr": 0,
+    "pnl": 0.0,
+    "roi": 0,
+    "trade_list": []
+  },
+  "C2_late_entry": {
+    "trades": 182,
+    "wins": 90,
+    "losses": 92,
+    "wr": 49.45054945054945,
+    "pnl": -465.7603719226581,
+    "roi": -5.118245845303935,
+    "trade_list": [
+      {
+        "side": "YES",
+        "price": 0.55,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1399362",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.53,
+        "result": "WIN",
+        "pnl": 44.339622641509436,
+        "market": "1399126",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.55,
+        "result": "WIN",
+        "pnl": 40.90909090909091,
+        "market": "1399104",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.53,
+        "result": "WIN",
+        "pnl": 44.339622641509436,
+        "market": "1398886",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.55,
+        "result": "WIN",
+        "pnl": 40.90909090909091,
+        "market": "1398882",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.55,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1398866",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.55,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1398858",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.54,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1398834",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.54,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1398412",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.55,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1397963",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.51,
+        "result": "WIN",
+        "pnl": 48.0392156862745,
+        "market": "1397949",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.55,
+        "result": "WIN",
+        "pnl": 40.90909090909091,
+        "market": "1397944",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.55,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1397844",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.54,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1397835",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.53,
+        "result": "WIN",
+        "pnl": 44.339622641509436,
+        "market": "1397737",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.52,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1397621",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.55,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1397609",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.55,
+        "result": "WIN",
+        "pnl": 40.90909090909091,
+        "market": "1397504",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.53,
+        "result": "WIN",
+        "pnl": 44.339622641509436,
+        "market": "1397499",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.54,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1397468",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.55,
+        "result": "WIN",
+        "pnl": 40.90909090909091,
+        "market": "1397274",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.55,
+        "result": "WIN",
+        "pnl": 40.90909090909091,
+        "market": "1397245",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.54,
+        "result": "WIN",
+        "pnl": 42.59259259259258,
+        "market": "1395476",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.53,
+        "result": "WIN",
+        "pnl": 44.339622641509436,
+        "market": "1395445",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.55,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1393934",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.54,
+        "result": "WIN",
+        "pnl": 42.59259259259258,
+        "market": "1393766",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.55,
+        "result": "WIN",
+        "pnl": 40.90909090909091,
+        "market": "1393667",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.54,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1393379",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.54,
+        "result": "WIN",
+        "pnl": 42.59259259259258,
+        "market": "1393367",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.54,
+        "result": "WIN",
+        "pnl": 42.59259259259258,
+        "market": "1393327",
+        "mtype": "5m"
+      }
+    ]
+  },
+  "C3_mispriced": {
+    "trades": 441,
+    "wins": 222,
+    "losses": 219,
+    "wr": 50.34013605442177,
+    "pnl": 162.55565739159232,
+    "roi": 0.737213865721507,
+    "trade_list": [
+      {
+        "side": "YES",
+        "price": 0.52,
+        "result": "WIN",
+        "pnl": 46.153846153846146,
+        "market": "1399631",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.5,
+        "result": "WIN",
+        "pnl": 50.0,
+        "market": "1399362",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.52,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1399328",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.52,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1399138",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.52,
+        "result": "WIN",
+        "pnl": 46.153846153846146,
+        "market": "1399017",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.51,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1399005",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.51,
+        "result": "WIN",
+        "pnl": 48.0392156862745,
+        "market": "1398968",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.5,
+        "result": "WIN",
+        "pnl": 50.0,
+        "market": "1398882",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.52,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1398866",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.51,
+        "result": "WIN",
+        "pnl": 48.0392156862745,
+        "market": "1398858",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.52,
+        "result": "WIN",
+        "pnl": 46.153846153846146,
+        "market": "1398855",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.49,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1398700",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.52,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1398412",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.52,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1397963",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.47,
+        "result": "WIN",
+        "pnl": 56.382978723404264,
+        "market": "1397949",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.52,
+        "result": "WIN",
+        "pnl": 46.153846153846146,
+        "market": "1397944",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.52,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1397930",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.52,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1397835",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.52,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1397830",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.51,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1397826",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.52,
+        "result": "WIN",
+        "pnl": 46.153846153846146,
+        "market": "1397808",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.52,
+        "result": "WIN",
+        "pnl": 46.153846153846146,
+        "market": "1397737",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.52,
+        "result": "WIN",
+        "pnl": 46.153846153846146,
+        "market": "1397621",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.52,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1397609",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.51,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1397597",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.52,
+        "result": "WIN",
+        "pnl": 46.153846153846146,
+        "market": "1397504",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.52,
+        "result": "WIN",
+        "pnl": 46.153846153846146,
+        "market": "1397499",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.52,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1397467",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.5,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1396824",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.51,
+        "result": "WIN",
+        "pnl": 48.0392156862745,
+        "market": "1396799",
+        "mtype": "5m"
+      }
+    ]
+  },
+  "C4_5m_only": {
+    "trades": 429,
+    "wins": 236,
+    "losses": 193,
+    "wr": 55.011655011655016,
+    "pnl": 755.9679912378284,
+    "roi": 3.5243262994770554,
+    "trade_list": [
+      {
+        "side": "YES",
+        "price": 0.55,
+        "result": "WIN",
+        "pnl": 40.90909090909091,
+        "market": "1399704",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.55,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1399635",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.52,
+        "result": "WIN",
+        "pnl": 46.153846153846146,
+        "market": "1399631",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.5,
+        "result": "WIN",
+        "pnl": 50.0,
+        "market": "1399362",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.52,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1399328",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.52,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1399138",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.55,
+        "result": "WIN",
+        "pnl": 40.90909090909091,
+        "market": "1399126",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.55,
+        "result": "WIN",
+        "pnl": 40.90909090909091,
+        "market": "1399122",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.55,
+        "result": "WIN",
+        "pnl": 40.90909090909091,
+        "market": "1399104",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.54,
+        "result": "WIN",
+        "pnl": 42.59259259259258,
+        "market": "1399017",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.55,
+        "result": "WIN",
+        "pnl": 40.90909090909091,
+        "market": "1398991",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.54,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1398987",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.55,
+        "result": "WIN",
+        "pnl": 40.90909090909091,
+        "market": "1398968",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.55,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1398886",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.53,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1398882",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.55,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1398866",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.55,
+        "result": "WIN",
+        "pnl": 40.90909090909091,
+        "market": "1398858",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.55,
+        "result": "WIN",
+        "pnl": 40.90909090909091,
+        "market": "1398855",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.54,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1398834",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.54,
+        "result": "WIN",
+        "pnl": 42.59259259259258,
+        "market": "1398700",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.54,
+        "result": "WIN",
+        "pnl": 42.59259259259258,
+        "market": "1398557",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.55,
+        "result": "WIN",
+        "pnl": 40.90909090909091,
+        "market": "1398431",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.53,
+        "result": "WIN",
+        "pnl": 44.339622641509436,
+        "market": "1398413",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.55,
+        "result": "WIN",
+        "pnl": 40.90909090909091,
+        "market": "1398412",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.55,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1397963",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.51,
+        "result": "WIN",
+        "pnl": 48.0392156862745,
+        "market": "1397949",
+        "mtype": "5m"
+      },
+      {
+        "side": "YES",
+        "price": 0.55,
+        "result": "WIN",
+        "pnl": 40.90909090909091,
+        "market": "1397944",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.53,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1397930",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.55,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1397844",
+        "mtype": "5m"
+      },
+      {
+        "side": "NO",
+        "price": 0.54,
+        "result": "LOSS",
+        "pnl": -50.0,
+        "market": "1397835",
+        "mtype": "5m"
+      }
+    ]
+  }
+}

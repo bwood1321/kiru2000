@@ -1,0 +1,2956 @@
+{
+  "config": {
+    "days": 30,
+    "bet": 50.0,
+    "markets": 5174
+  },
+  "individual": {
+    "LAT1_current": {
+      "trades": 73,
+      "wins": 34,
+      "losses": 39,
+      "wr": 46.57534246575342,
+      "pnl": 805.569440089564,
+      "trade_list": [
+        {
+          "side": "NO",
+          "price": 0.4,
+          "result": "WIN",
+          "pnl": 75.0
+        },
+        {
+          "side": "YES",
+          "price": 0.4,
+          "result": "WIN",
+          "pnl": 75.0
+        },
+        {
+          "side": "NO",
+          "price": 0.35,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.38,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.4,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.4,
+          "result": "WIN",
+          "pnl": 75.0
+        },
+        {
+          "side": "NO",
+          "price": 0.34,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.4,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.39,
+          "result": "WIN",
+          "pnl": 78.2051282051282
+        },
+        {
+          "side": "NO",
+          "price": 0.39,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.4,
+          "result": "WIN",
+          "pnl": 75.0
+        },
+        {
+          "side": "YES",
+          "price": 0.39,
+          "result": "WIN",
+          "pnl": 78.2051282051282
+        },
+        {
+          "side": "YES",
+          "price": 0.37,
+          "result": "WIN",
+          "pnl": 85.13513513513513
+        },
+        {
+          "side": "NO",
+          "price": 0.4,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.39,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.4,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.4,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.4,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.4,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.4,
+          "result": "LOSS",
+          "pnl": -50.0
+        }
+      ]
+    },
+    "LAT2_wider": {
+      "trades": 939,
+      "wins": 503,
+      "losses": 436,
+      "wr": 53.567625133120345,
+      "pnl": 1979.2726259585784,
+      "trade_list": [
+        {
+          "side": "YES",
+          "price": 0.54,
+          "result": "WIN",
+          "pnl": 42.59259259259258
+        },
+        {
+          "side": "YES",
+          "price": 0.55,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.48,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.52,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.55,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.53,
+          "result": "WIN",
+          "pnl": 44.339622641509436
+        },
+        {
+          "side": "NO",
+          "price": 0.55,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.49,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.55,
+          "result": "WIN",
+          "pnl": 40.90909090909091
+        },
+        {
+          "side": "NO",
+          "price": 0.53,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.55,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.55,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.53,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.55,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.55,
+          "result": "WIN",
+          "pnl": 40.90909090909091
+        },
+        {
+          "side": "YES",
+          "price": 0.55,
+          "result": "WIN",
+          "pnl": 40.90909090909091
+        },
+        {
+          "side": "YES",
+          "price": 0.51,
+          "result": "WIN",
+          "pnl": 48.0392156862745
+        },
+        {
+          "side": "YES",
+          "price": 0.54,
+          "result": "WIN",
+          "pnl": 42.59259259259258
+        },
+        {
+          "side": "NO",
+          "price": 0.52,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.54,
+          "result": "WIN",
+          "pnl": 42.59259259259258
+        }
+      ]
+    },
+    "LAT3_mid": {
+      "trades": 939,
+      "wins": 503,
+      "losses": 436,
+      "wr": 53.567625133120345,
+      "pnl": 1975.0709452863093,
+      "trade_list": [
+        {
+          "side": "YES",
+          "price": 0.54,
+          "result": "WIN",
+          "pnl": 42.59259259259258
+        },
+        {
+          "side": "YES",
+          "price": 0.55,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.48,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.52,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.55,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.53,
+          "result": "WIN",
+          "pnl": 44.339622641509436
+        },
+        {
+          "side": "NO",
+          "price": 0.55,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.49,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.55,
+          "result": "WIN",
+          "pnl": 40.90909090909091
+        },
+        {
+          "side": "NO",
+          "price": 0.53,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.55,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.55,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.53,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.55,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.55,
+          "result": "WIN",
+          "pnl": 40.90909090909091
+        },
+        {
+          "side": "YES",
+          "price": 0.55,
+          "result": "WIN",
+          "pnl": 40.90909090909091
+        },
+        {
+          "side": "YES",
+          "price": 0.51,
+          "result": "WIN",
+          "pnl": 48.0392156862745
+        },
+        {
+          "side": "YES",
+          "price": 0.54,
+          "result": "WIN",
+          "pnl": 42.59259259259258
+        },
+        {
+          "side": "NO",
+          "price": 0.52,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.54,
+          "result": "WIN",
+          "pnl": 42.59259259259258
+        }
+      ]
+    },
+    "LAT4_strong": {
+      "trades": 248,
+      "wins": 129,
+      "losses": 119,
+      "wr": 52.016129032258064,
+      "pnl": 1265.0547255962988,
+      "trade_list": [
+        {
+          "side": "YES",
+          "price": 0.48,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.48,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.48,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.5,
+          "result": "WIN",
+          "pnl": 50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.43,
+          "result": "WIN",
+          "pnl": 66.27906976744187
+        },
+        {
+          "side": "YES",
+          "price": 0.5,
+          "result": "WIN",
+          "pnl": 50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.5,
+          "result": "WIN",
+          "pnl": 50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.5,
+          "result": "WIN",
+          "pnl": 50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.5,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.5,
+          "result": "WIN",
+          "pnl": 50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.44,
+          "result": "WIN",
+          "pnl": 63.63636363636364
+        },
+        {
+          "side": "YES",
+          "price": 0.5,
+          "result": "WIN",
+          "pnl": 50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.5,
+          "result": "WIN",
+          "pnl": 50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.5,
+          "result": "WIN",
+          "pnl": 50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.5,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.5,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.47,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.49,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.49,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.5,
+          "result": "LOSS",
+          "pnl": -50.0
+        }
+      ]
+    },
+    "FLA1_cheap": {
+      "trades": 80,
+      "wins": 27,
+      "losses": 53,
+      "wr": 33.75,
+      "pnl": 1260.9041154215938,
+      "trade_list": [
+        {
+          "side": "NO",
+          "price": 0.3,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.3,
+          "result": "WIN",
+          "pnl": 116.66666666666669
+        },
+        {
+          "side": "NO",
+          "price": 0.15,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.23,
+          "result": "WIN",
+          "pnl": 167.39130434782606
+        },
+        {
+          "side": "YES",
+          "price": 0.29,
+          "result": "WIN",
+          "pnl": 122.41379310344828
+        },
+        {
+          "side": "YES",
+          "price": 0.19,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.3,
+          "result": "WIN",
+          "pnl": 116.66666666666669
+        },
+        {
+          "side": "YES",
+          "price": 0.3,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.28,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.29,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.3,
+          "result": "WIN",
+          "pnl": 116.66666666666669
+        },
+        {
+          "side": "NO",
+          "price": 0.29,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.27,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.3,
+          "result": "WIN",
+          "pnl": 116.66666666666669
+        },
+        {
+          "side": "NO",
+          "price": 0.3,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.3,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.3,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.3,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.28,
+          "result": "WIN",
+          "pnl": 128.57142857142856
+        },
+        {
+          "side": "NO",
+          "price": 0.29,
+          "result": "LOSS",
+          "pnl": -50.0
+        }
+      ]
+    },
+    "FLA2_5m_mid": {
+      "trades": 448,
+      "wins": 248,
+      "losses": 200,
+      "wr": 55.35714285714286,
+      "pnl": 936.2058136095616,
+      "trade_list": [
+        {
+          "side": "NO",
+          "price": 0.53,
+          "result": "WIN",
+          "pnl": 44.339622641509436
+        },
+        {
+          "side": "YES",
+          "price": 0.55,
+          "result": "WIN",
+          "pnl": 40.90909090909091
+        },
+        {
+          "side": "YES",
+          "price": 0.55,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.52,
+          "result": "WIN",
+          "pnl": 46.153846153846146
+        },
+        {
+          "side": "NO",
+          "price": 0.5,
+          "result": "WIN",
+          "pnl": 50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.52,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.52,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.54,
+          "result": "WIN",
+          "pnl": 42.59259259259258
+        },
+        {
+          "side": "NO",
+          "price": 0.55,
+          "result": "WIN",
+          "pnl": 40.90909090909091
+        },
+        {
+          "side": "YES",
+          "price": 0.55,
+          "result": "WIN",
+          "pnl": 40.90909090909091
+        },
+        {
+          "side": "YES",
+          "price": 0.55,
+          "result": "WIN",
+          "pnl": 40.90909090909091
+        },
+        {
+          "side": "YES",
+          "price": 0.54,
+          "result": "WIN",
+          "pnl": 42.59259259259258
+        },
+        {
+          "side": "NO",
+          "price": 0.55,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.55,
+          "result": "WIN",
+          "pnl": 40.90909090909091
+        },
+        {
+          "side": "YES",
+          "price": 0.54,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.55,
+          "result": "WIN",
+          "pnl": 40.90909090909091
+        },
+        {
+          "side": "NO",
+          "price": 0.55,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.53,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.55,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.55,
+          "result": "WIN",
+          "pnl": 40.90909090909091
+        }
+      ]
+    },
+    "FLA3_all_mid": {
+      "trades": 627,
+      "wins": 340,
+      "losses": 287,
+      "wr": 54.22647527910686,
+      "pnl": 633.6590672417714,
+      "trade_list": [
+        {
+          "side": "NO",
+          "price": 0.53,
+          "result": "WIN",
+          "pnl": 44.339622641509436
+        },
+        {
+          "side": "YES",
+          "price": 0.55,
+          "result": "WIN",
+          "pnl": 40.90909090909091
+        },
+        {
+          "side": "YES",
+          "price": 0.55,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.52,
+          "result": "WIN",
+          "pnl": 46.153846153846146
+        },
+        {
+          "side": "NO",
+          "price": 0.5,
+          "result": "WIN",
+          "pnl": 50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.52,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.52,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.54,
+          "result": "WIN",
+          "pnl": 42.59259259259258
+        },
+        {
+          "side": "NO",
+          "price": 0.55,
+          "result": "WIN",
+          "pnl": 40.90909090909091
+        },
+        {
+          "side": "YES",
+          "price": 0.55,
+          "result": "WIN",
+          "pnl": 40.90909090909091
+        },
+        {
+          "side": "YES",
+          "price": 0.55,
+          "result": "WIN",
+          "pnl": 40.90909090909091
+        },
+        {
+          "side": "YES",
+          "price": 0.54,
+          "result": "WIN",
+          "pnl": 42.59259259259258
+        },
+        {
+          "side": "NO",
+          "price": 0.55,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.55,
+          "result": "WIN",
+          "pnl": 40.90909090909091
+        },
+        {
+          "side": "YES",
+          "price": 0.54,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.55,
+          "result": "WIN",
+          "pnl": 40.90909090909091
+        },
+        {
+          "side": "NO",
+          "price": 0.55,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.53,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.55,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.55,
+          "result": "WIN",
+          "pnl": 40.90909090909091
+        }
+      ]
+    },
+    "FLA4_5m_wide": {
+      "trades": 449,
+      "wins": 248,
+      "losses": 201,
+      "wr": 55.233853006681514,
+      "pnl": 918.3899324432309,
+      "trade_list": [
+        {
+          "side": "NO",
+          "price": 0.53,
+          "result": "WIN",
+          "pnl": 44.339622641509436
+        },
+        {
+          "side": "YES",
+          "price": 0.55,
+          "result": "WIN",
+          "pnl": 40.90909090909091
+        },
+        {
+          "side": "YES",
+          "price": 0.55,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.52,
+          "result": "WIN",
+          "pnl": 46.153846153846146
+        },
+        {
+          "side": "NO",
+          "price": 0.5,
+          "result": "WIN",
+          "pnl": 50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.52,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.52,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.54,
+          "result": "WIN",
+          "pnl": 42.59259259259258
+        },
+        {
+          "side": "NO",
+          "price": 0.55,
+          "result": "WIN",
+          "pnl": 40.90909090909091
+        },
+        {
+          "side": "YES",
+          "price": 0.55,
+          "result": "WIN",
+          "pnl": 40.90909090909091
+        },
+        {
+          "side": "YES",
+          "price": 0.55,
+          "result": "WIN",
+          "pnl": 40.90909090909091
+        },
+        {
+          "side": "YES",
+          "price": 0.54,
+          "result": "WIN",
+          "pnl": 42.59259259259258
+        },
+        {
+          "side": "NO",
+          "price": 0.55,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.55,
+          "result": "WIN",
+          "pnl": 40.90909090909091
+        },
+        {
+          "side": "YES",
+          "price": 0.54,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.55,
+          "result": "WIN",
+          "pnl": 40.90909090909091
+        },
+        {
+          "side": "NO",
+          "price": 0.55,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.53,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.55,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.55,
+          "result": "WIN",
+          "pnl": 40.90909090909091
+        }
+      ]
+    },
+    "SNP1_current": {
+      "trades": 0,
+      "wins": 0,
+      "losses": 0,
+      "wr": 0,
+      "pnl": 0.0,
+      "trade_list": []
+    },
+    "SNP2_wider": {
+      "trades": 0,
+      "wins": 0,
+      "losses": 0,
+      "wr": 0,
+      "pnl": 0.0,
+      "trade_list": []
+    },
+    "SNP3_both": {
+      "trades": 3,
+      "wins": 2,
+      "losses": 1,
+      "wr": 66.66666666666666,
+      "pnl": -41.25295508274231,
+      "trade_list": [
+        {
+          "side": "YES",
+          "price": 0.9,
+          "result": "WIN",
+          "pnl": 5.555555555555557
+        },
+        {
+          "side": "NO",
+          "price": 0.84,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.94,
+          "result": "WIN",
+          "pnl": 3.191489361702132
+        }
+      ]
+    },
+    "SNP4_cheaper": {
+      "trades": 0,
+      "wins": 0,
+      "losses": 0,
+      "wr": 0,
+      "pnl": 0.0,
+      "trade_list": []
+    },
+    "MR1_current": {
+      "trades": 886,
+      "wins": 351,
+      "losses": 535,
+      "wr": 39.61625282167043,
+      "pnl": 2613.3888555604203,
+      "trade_list": [
+        {
+          "side": "YES",
+          "price": 0.35,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.36,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.3,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.3,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.32,
+          "result": "WIN",
+          "pnl": 106.25
+        },
+        {
+          "side": "NO",
+          "price": 0.3,
+          "result": "WIN",
+          "pnl": 116.66666666666669
+        },
+        {
+          "side": "NO",
+          "price": 0.4,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.37,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.4,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.4,
+          "result": "WIN",
+          "pnl": 75.0
+        },
+        {
+          "side": "YES",
+          "price": 0.3,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.3,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.3,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.33,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.34,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.3,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.36,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.33,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.4,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.34,
+          "result": "LOSS",
+          "pnl": -50.0
+        }
+      ]
+    },
+    "MR2_wider": {
+      "trades": 1013,
+      "wins": 391,
+      "losses": 622,
+      "wr": 38.59822309970385,
+      "pnl": 2128.877817511396,
+      "trade_list": [
+        {
+          "side": "YES",
+          "price": 0.35,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.36,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.26,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.3,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.32,
+          "result": "WIN",
+          "pnl": 106.25
+        },
+        {
+          "side": "NO",
+          "price": 0.3,
+          "result": "WIN",
+          "pnl": 116.66666666666669
+        },
+        {
+          "side": "NO",
+          "price": 0.25,
+          "result": "WIN",
+          "pnl": 150.0
+        },
+        {
+          "side": "NO",
+          "price": 0.25,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.4,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.37,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.4,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.4,
+          "result": "WIN",
+          "pnl": 75.0
+        },
+        {
+          "side": "YES",
+          "price": 0.25,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.25,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.26,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.25,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.33,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.34,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.3,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.26,
+          "result": "LOSS",
+          "pnl": -50.0
+        }
+      ]
+    },
+    "MR3_strong": {
+      "trades": 116,
+      "wins": 34,
+      "losses": 82,
+      "wr": 29.310344827586203,
+      "pnl": -915.0636462629127,
+      "trade_list": [
+        {
+          "side": "YES",
+          "price": 0.3,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.35,
+          "result": "WIN",
+          "pnl": 92.85714285714286
+        },
+        {
+          "side": "NO",
+          "price": 0.3,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.3,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.3,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.3,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.32,
+          "result": "WIN",
+          "pnl": 106.25
+        },
+        {
+          "side": "YES",
+          "price": 0.3,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.3,
+          "result": "WIN",
+          "pnl": 116.66666666666669
+        },
+        {
+          "side": "YES",
+          "price": 0.31,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.3,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.3,
+          "result": "WIN",
+          "pnl": 116.66666666666669
+        },
+        {
+          "side": "YES",
+          "price": 0.3,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.3,
+          "result": "WIN",
+          "pnl": 116.66666666666669
+        },
+        {
+          "side": "NO",
+          "price": 0.3,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.35,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.3,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.33,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.3,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.3,
+          "result": "WIN",
+          "pnl": 116.66666666666669
+        }
+      ]
+    },
+    "MR4_tight": {
+      "trades": 350,
+      "wins": 137,
+      "losses": 213,
+      "wr": 39.14285714285714,
+      "pnl": -110.85074909154353,
+      "trade_list": [
+        {
+          "side": "NO",
+          "price": 0.38,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.39,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.39,
+          "result": "WIN",
+          "pnl": 78.2051282051282
+        },
+        {
+          "side": "NO",
+          "price": 0.37,
+          "result": "WIN",
+          "pnl": 85.13513513513513
+        },
+        {
+          "side": "YES",
+          "price": 0.36,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.38,
+          "result": "WIN",
+          "pnl": 81.57894736842104
+        },
+        {
+          "side": "YES",
+          "price": 0.43,
+          "result": "WIN",
+          "pnl": 66.27906976744187
+        },
+        {
+          "side": "YES",
+          "price": 0.43,
+          "result": "WIN",
+          "pnl": 66.27906976744187
+        },
+        {
+          "side": "YES",
+          "price": 0.37,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.46,
+          "result": "WIN",
+          "pnl": 58.69565217391303
+        },
+        {
+          "side": "NO",
+          "price": 0.35,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.42,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.35,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.35,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.39,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.36,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.35,
+          "result": "WIN",
+          "pnl": 92.85714285714286
+        },
+        {
+          "side": "YES",
+          "price": 0.39,
+          "result": "WIN",
+          "pnl": 78.2051282051282
+        },
+        {
+          "side": "YES",
+          "price": 0.36,
+          "result": "WIN",
+          "pnl": 88.88888888888889
+        },
+        {
+          "side": "NO",
+          "price": 0.44,
+          "result": "LOSS",
+          "pnl": -50.0
+        }
+      ]
+    },
+    "ARB1_97": {
+      "trades": 646,
+      "wins": 251,
+      "losses": 395,
+      "wr": 38.85448916408669,
+      "pnl": 4601.6569203478175,
+      "trade_list": [
+        {
+          "side": "NO",
+          "price": 0.45,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.39,
+          "result": "WIN",
+          "pnl": 78.2051282051282
+        },
+        {
+          "side": "NO",
+          "price": 0.41,
+          "result": "WIN",
+          "pnl": 71.95121951219512
+        },
+        {
+          "side": "YES",
+          "price": 0.43,
+          "result": "WIN",
+          "pnl": 66.27906976744187
+        },
+        {
+          "side": "YES",
+          "price": 0.3,
+          "result": "WIN",
+          "pnl": 116.66666666666669
+        },
+        {
+          "side": "NO",
+          "price": 0.46,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.39,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.25,
+          "result": "WIN",
+          "pnl": 150.0
+        },
+        {
+          "side": "NO",
+          "price": 0.3,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.46,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.45,
+          "result": "WIN",
+          "pnl": 61.111111111111114
+        },
+        {
+          "side": "NO",
+          "price": 0.32,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.39,
+          "result": "WIN",
+          "pnl": 78.2051282051282
+        },
+        {
+          "side": "YES",
+          "price": 0.3,
+          "result": "WIN",
+          "pnl": 116.66666666666669
+        },
+        {
+          "side": "NO",
+          "price": 0.1,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.38,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.22,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.44,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.38,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.38,
+          "result": "WIN",
+          "pnl": 81.57894736842104
+        }
+      ]
+    },
+    "ARB2_95": {
+      "trades": 288,
+      "wins": 121,
+      "losses": 167,
+      "wr": 42.01388888888889,
+      "pnl": 5069.235260003425,
+      "trade_list": [
+        {
+          "side": "NO",
+          "price": 0.41,
+          "result": "WIN",
+          "pnl": 71.95121951219512
+        },
+        {
+          "side": "NO",
+          "price": 0.37,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.39,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.46,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.45,
+          "result": "WIN",
+          "pnl": 61.111111111111114
+        },
+        {
+          "side": "NO",
+          "price": 0.32,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.34,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.21,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.19,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.18,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.36,
+          "result": "WIN",
+          "pnl": 88.88888888888889
+        },
+        {
+          "side": "YES",
+          "price": 0.42,
+          "result": "WIN",
+          "pnl": 69.04761904761905
+        },
+        {
+          "side": "YES",
+          "price": 0.29,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.19,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.36,
+          "result": "WIN",
+          "pnl": 88.88888888888889
+        },
+        {
+          "side": "NO",
+          "price": 0.38,
+          "result": "WIN",
+          "pnl": 81.57894736842104
+        },
+        {
+          "side": "YES",
+          "price": 0.28,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.3,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.17,
+          "result": "WIN",
+          "pnl": 244.11764705882354
+        },
+        {
+          "side": "NO",
+          "price": 0.34,
+          "result": "LOSS",
+          "pnl": -50.0
+        }
+      ]
+    },
+    "ARB3_99": {
+      "trades": 2158,
+      "wins": 827,
+      "losses": 1331,
+      "wr": 38.32252085264133,
+      "pnl": 3800.7276905877125,
+      "trade_list": [
+        {
+          "side": "NO",
+          "price": 0.47,
+          "result": "WIN",
+          "pnl": 56.382978723404264
+        },
+        {
+          "side": "YES",
+          "price": 0.38,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.45,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.47,
+          "result": "WIN",
+          "pnl": 56.382978723404264
+        },
+        {
+          "side": "YES",
+          "price": 0.48,
+          "result": "WIN",
+          "pnl": 54.16666666666667
+        },
+        {
+          "side": "NO",
+          "price": 0.48,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.41,
+          "result": "WIN",
+          "pnl": 71.95121951219512
+        },
+        {
+          "side": "YES",
+          "price": 0.36,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.23,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.41,
+          "result": "WIN",
+          "pnl": 71.95121951219512
+        },
+        {
+          "side": "NO",
+          "price": 0.3,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.4,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.32,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.39,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.2,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.24,
+          "result": "WIN",
+          "pnl": 158.33333333333334
+        },
+        {
+          "side": "YES",
+          "price": 0.43,
+          "result": "WIN",
+          "pnl": 66.27906976744187
+        },
+        {
+          "side": "YES",
+          "price": 0.47,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.38,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.3,
+          "result": "WIN",
+          "pnl": 116.66666666666669
+        }
+      ]
+    },
+    "ARB4_93": {
+      "trades": 218,
+      "wins": 88,
+      "losses": 130,
+      "wr": 40.36697247706422,
+      "pnl": 3956.2784003309844,
+      "trade_list": [
+        {
+          "side": "YES",
+          "price": 0.45,
+          "result": "WIN",
+          "pnl": 61.111111111111114
+        },
+        {
+          "side": "YES",
+          "price": 0.4,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.21,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.19,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.18,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.36,
+          "result": "WIN",
+          "pnl": 88.88888888888889
+        },
+        {
+          "side": "YES",
+          "price": 0.29,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.19,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.36,
+          "result": "WIN",
+          "pnl": 88.88888888888889
+        },
+        {
+          "side": "YES",
+          "price": 0.3,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.29,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.42,
+          "result": "WIN",
+          "pnl": 69.04761904761905
+        },
+        {
+          "side": "NO",
+          "price": 0.24,
+          "result": "WIN",
+          "pnl": 158.33333333333334
+        },
+        {
+          "side": "YES",
+          "price": 0.4,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.36,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.44,
+          "result": "WIN",
+          "pnl": 63.63636363636364
+        },
+        {
+          "side": "YES",
+          "price": 0.4,
+          "result": "WIN",
+          "pnl": 75.0
+        },
+        {
+          "side": "NO",
+          "price": 0.21,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.36,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.31,
+          "result": "WIN",
+          "pnl": 111.29032258064515
+        }
+      ]
+    },
+    "SPK1_current": {
+      "trades": 0,
+      "wins": 0,
+      "losses": 0,
+      "wr": 0,
+      "pnl": 0.0,
+      "trade_list": []
+    },
+    "SPK2_wider": {
+      "trades": 0,
+      "wins": 0,
+      "losses": 0,
+      "wr": 0,
+      "pnl": 0.0,
+      "trade_list": []
+    },
+    "SPK3_strict": {
+      "trades": 0,
+      "wins": 0,
+      "losses": 0,
+      "wr": 0,
+      "pnl": 0.0,
+      "trade_list": []
+    }
+  },
+  "combos": {
+    "COMBO1_current_bot": {
+      "trades": 1480,
+      "wins": 582,
+      "losses": 898,
+      "wr": 39.32432432432432,
+      "pnl": 7345.1105337774015,
+      "trade_list": [
+        {
+          "side": "NO",
+          "price": 0.45,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.39,
+          "result": "WIN",
+          "pnl": 78.2051282051282
+        },
+        {
+          "side": "NO",
+          "price": 0.41,
+          "result": "WIN",
+          "pnl": 71.95121951219512
+        },
+        {
+          "side": "YES",
+          "price": 0.35,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.36,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.3,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.3,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.32,
+          "result": "WIN",
+          "pnl": 106.25
+        },
+        {
+          "side": "NO",
+          "price": 0.3,
+          "result": "WIN",
+          "pnl": 116.66666666666669
+        },
+        {
+          "side": "YES",
+          "price": 0.43,
+          "result": "WIN",
+          "pnl": 66.27906976744187
+        },
+        {
+          "side": "NO",
+          "price": 0.4,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.37,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.4,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.3,
+          "result": "WIN",
+          "pnl": 116.66666666666669
+        },
+        {
+          "side": "YES",
+          "price": 0.3,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.3,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.46,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.3,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.3,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.33,
+          "result": "LOSS",
+          "pnl": -50.0
+        }
+      ]
+    },
+    "COMBO2_optimized": {
+      "trades": 1954,
+      "wins": 877,
+      "losses": 1077,
+      "wr": 44.88229273285568,
+      "pnl": 8078.748278881982,
+      "trade_list": [
+        {
+          "side": "NO",
+          "price": 0.53,
+          "result": "WIN",
+          "pnl": 44.339622641509436
+        },
+        {
+          "side": "NO",
+          "price": 0.45,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.39,
+          "result": "WIN",
+          "pnl": 78.2051282051282
+        },
+        {
+          "side": "NO",
+          "price": 0.41,
+          "result": "WIN",
+          "pnl": 71.95121951219512
+        },
+        {
+          "side": "YES",
+          "price": 0.35,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.36,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.26,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.3,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.32,
+          "result": "WIN",
+          "pnl": 106.25
+        },
+        {
+          "side": "NO",
+          "price": 0.3,
+          "result": "WIN",
+          "pnl": 116.66666666666669
+        },
+        {
+          "side": "NO",
+          "price": 0.25,
+          "result": "WIN",
+          "pnl": 150.0
+        },
+        {
+          "side": "YES",
+          "price": 0.43,
+          "result": "WIN",
+          "pnl": 66.27906976744187
+        },
+        {
+          "side": "YES",
+          "price": 0.55,
+          "result": "WIN",
+          "pnl": 40.90909090909091
+        },
+        {
+          "side": "NO",
+          "price": 0.37,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.54,
+          "result": "WIN",
+          "pnl": 42.59259259259258
+        },
+        {
+          "side": "YES",
+          "price": 0.55,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.4,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.3,
+          "result": "WIN",
+          "pnl": 116.66666666666669
+        },
+        {
+          "side": "YES",
+          "price": 0.25,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.25,
+          "result": "LOSS",
+          "pnl": -50.0
+        }
+      ]
+    },
+    "COMBO3_aggressive": {
+      "trades": 2963,
+      "wins": 1239,
+      "losses": 1724,
+      "wr": 41.81572730340871,
+      "pnl": 5674.087529640859,
+      "trade_list": [
+        {
+          "side": "NO",
+          "price": 0.47,
+          "result": "WIN",
+          "pnl": 56.382978723404264
+        },
+        {
+          "side": "YES",
+          "price": 0.38,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.45,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.47,
+          "result": "WIN",
+          "pnl": 56.382978723404264
+        },
+        {
+          "side": "YES",
+          "price": 0.48,
+          "result": "WIN",
+          "pnl": 54.16666666666667
+        },
+        {
+          "side": "NO",
+          "price": 0.48,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.41,
+          "result": "WIN",
+          "pnl": 71.95121951219512
+        },
+        {
+          "side": "YES",
+          "price": 0.36,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.23,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.36,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.41,
+          "result": "WIN",
+          "pnl": 71.95121951219512
+        },
+        {
+          "side": "NO",
+          "price": 0.3,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.26,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.4,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.32,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.39,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.32,
+          "result": "WIN",
+          "pnl": 106.25
+        },
+        {
+          "side": "YES",
+          "price": 0.2,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.24,
+          "result": "WIN",
+          "pnl": 158.33333333333334
+        },
+        {
+          "side": "NO",
+          "price": 0.25,
+          "result": "WIN",
+          "pnl": 150.0
+        }
+      ]
+    },
+    "COMBO4_conservative": {
+      "trades": 899,
+      "wins": 437,
+      "losses": 462,
+      "wr": 48.60956618464961,
+      "pnl": 6132.44180731412,
+      "trade_list": [
+        {
+          "side": "NO",
+          "price": 0.53,
+          "result": "WIN",
+          "pnl": 44.339622641509436
+        },
+        {
+          "side": "NO",
+          "price": 0.41,
+          "result": "WIN",
+          "pnl": 71.95121951219512
+        },
+        {
+          "side": "YES",
+          "price": 0.55,
+          "result": "WIN",
+          "pnl": 40.90909090909091
+        },
+        {
+          "side": "YES",
+          "price": 0.55,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.52,
+          "result": "WIN",
+          "pnl": 46.153846153846146
+        },
+        {
+          "side": "NO",
+          "price": 0.37,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.3,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.5,
+          "result": "WIN",
+          "pnl": 50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.52,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.39,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.52,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.54,
+          "result": "WIN",
+          "pnl": 42.59259259259258
+        },
+        {
+          "side": "NO",
+          "price": 0.55,
+          "result": "WIN",
+          "pnl": 40.90909090909091
+        },
+        {
+          "side": "YES",
+          "price": 0.55,
+          "result": "WIN",
+          "pnl": 40.90909090909091
+        },
+        {
+          "side": "YES",
+          "price": 0.55,
+          "result": "WIN",
+          "pnl": 40.90909090909091
+        },
+        {
+          "side": "NO",
+          "price": 0.35,
+          "result": "WIN",
+          "pnl": 92.85714285714286
+        },
+        {
+          "side": "NO",
+          "price": 0.3,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.54,
+          "result": "WIN",
+          "pnl": 42.59259259259258
+        },
+        {
+          "side": "NO",
+          "price": 0.55,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.55,
+          "result": "WIN",
+          "pnl": 40.90909090909091
+        }
+      ]
+    },
+    "COMBO5_no_flash": {
+      "trades": 1899,
+      "wins": 837,
+      "losses": 1062,
+      "wr": 44.07582938388626,
+      "pnl": 7468.364520379142,
+      "trade_list": [
+        {
+          "side": "NO",
+          "price": 0.45,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.39,
+          "result": "WIN",
+          "pnl": 78.2051282051282
+        },
+        {
+          "side": "NO",
+          "price": 0.41,
+          "result": "WIN",
+          "pnl": 71.95121951219512
+        },
+        {
+          "side": "YES",
+          "price": 0.35,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.36,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.26,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.3,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.32,
+          "result": "WIN",
+          "pnl": 106.25
+        },
+        {
+          "side": "NO",
+          "price": 0.3,
+          "result": "WIN",
+          "pnl": 116.66666666666669
+        },
+        {
+          "side": "NO",
+          "price": 0.25,
+          "result": "WIN",
+          "pnl": 150.0
+        },
+        {
+          "side": "YES",
+          "price": 0.43,
+          "result": "WIN",
+          "pnl": 66.27906976744187
+        },
+        {
+          "side": "NO",
+          "price": 0.4,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.37,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.54,
+          "result": "WIN",
+          "pnl": 42.59259259259258
+        },
+        {
+          "side": "YES",
+          "price": 0.55,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.4,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.3,
+          "result": "WIN",
+          "pnl": 116.66666666666669
+        },
+        {
+          "side": "YES",
+          "price": 0.25,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.25,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.46,
+          "result": "LOSS",
+          "pnl": -50.0
+        }
+      ]
+    },
+    "COMBO6_arb_lat_only": {
+      "trades": 1465,
+      "wins": 695,
+      "losses": 770,
+      "wr": 47.44027303754266,
+      "pnl": 5959.228226163371,
+      "trade_list": [
+        {
+          "side": "NO",
+          "price": 0.45,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.39,
+          "result": "WIN",
+          "pnl": 78.2051282051282
+        },
+        {
+          "side": "NO",
+          "price": 0.41,
+          "result": "WIN",
+          "pnl": 71.95121951219512
+        },
+        {
+          "side": "YES",
+          "price": 0.43,
+          "result": "WIN",
+          "pnl": 66.27906976744187
+        },
+        {
+          "side": "YES",
+          "price": 0.54,
+          "result": "WIN",
+          "pnl": 42.59259259259258
+        },
+        {
+          "side": "YES",
+          "price": 0.55,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.3,
+          "result": "WIN",
+          "pnl": 116.66666666666669
+        },
+        {
+          "side": "YES",
+          "price": 0.48,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.46,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "YES",
+          "price": 0.52,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.39,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.25,
+          "result": "WIN",
+          "pnl": 150.0
+        },
+        {
+          "side": "YES",
+          "price": 0.55,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.53,
+          "result": "WIN",
+          "pnl": 44.339622641509436
+        },
+        {
+          "side": "NO",
+          "price": 0.55,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.49,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.55,
+          "result": "WIN",
+          "pnl": 40.90909090909091
+        },
+        {
+          "side": "NO",
+          "price": 0.53,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.55,
+          "result": "LOSS",
+          "pnl": -50.0
+        },
+        {
+          "side": "NO",
+          "price": 0.55,
+          "result": "LOSS",
+          "pnl": -50.0
+        }
+      ]
+    }
+  },
+  "recommended": {
+    "LATENCY": {
+      "variant": "LAT2_wider",
+      "pnl": 1979.2726259585784,
+      "deploy": true
+    },
+    "FLASH": {
+      "variant": "FLA1_cheap",
+      "pnl": 1260.9041154215938,
+      "deploy": true
+    },
+    "SNIPE": {
+      "variant": "SNP1_current",
+      "pnl": 0.0,
+      "deploy": false
+    },
+    "MEANREV": {
+      "variant": "MR1_current",
+      "pnl": 2613.3888555604203,
+      "deploy": true
+    },
+    "ARB": {
+      "variant": "ARB2_95",
+      "pnl": 5069.235260003425,
+      "deploy": true
+    },
+    "SPIKE": {
+      "variant": "SPK1_current",
+      "pnl": 0.0,
+      "deploy": false
+    }
+  }
+}
