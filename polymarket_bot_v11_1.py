@@ -1590,7 +1590,8 @@ class Cortex:
         # v9.4: Floor at 0.40 ALWAYS — not just at startup
         # Flash went to 0.10x during live trading = $26 bets = useless
         # At 30% WR, losing streaks are NORMAL. Don't crush strategies for it.
-        if strat not in ("LATENCY", "ACCEL", "DIVERGENCE") and s._trust[strat] < 0.40 and s._trust[strat] > 0.0:
+        # v11.1: Floor at 0.40 for ARB only — all directional strategies protected at 1.0 via get_trust
+        if strat not in ("LATENCY", "ACCEL", "DIVERGENCE", "MOMENTUM", "OPENDRIVE") and s._trust[strat] < 0.40 and s._trust[strat] > 0.0:
             s._trust[strat] = 0.40
 
     def _recalc_slot_trust(s, sk, strat):
@@ -1782,8 +1783,9 @@ class Cortex:
 
         trust = base_trust * regime_mult
 
-        # SACRED: Latency and Squeeze minimum 1.0
-        if strat in ("LATENCY", "ACCEL", "DIVERGENCE"):
+        # SACRED: Never crush strategies below 1.0 until they have real trade data
+        # v11.1: Protect ALL strategies — regime affinity should inform, not kill
+        if strat in ("LATENCY", "ACCEL", "DIVERGENCE", "MOMENTUM", "OPENDRIVE"):
             trust = max(1.0, trust)
 
         return round(max(0.0, min(2.5, trust)), 2)
@@ -3272,16 +3274,22 @@ class Dash:
         # ╚══════════════════════════════════════════════════════════════╝
         if slot_markets and feeds:
             active_count = sum(1 for sm in slot_markets.values() if sm)
+            total_slots = len(slot_markets)
             print(f"\n  {H1}┌{'─'*62}┐{R}")
-            print(f"  {H1}│{R}  {LBL}MARKETS{R}  ({active_count} active)                                        {H1}│{R}")
+            print(f"  {H1}│{R}  {LBL}MARKETS{R}  ({active_count}/{total_slots} active)                                     {H1}│{R}")
             print(f"  {H1}├{'─'*62}┤{R}")
             asset_icons = {"btc": "₿", "eth": "Ξ", "sol": "◎", "xrp": "✕"}
             for slot_key, sm in sorted(slot_markets.items()):
-                if not sm: continue
                 parts = slot_key.split("-")
                 asset = parts[0]
                 tf = parts[1] if len(parts) > 1 else "15m"
                 af = feeds.get(asset)
+                ic = asset_icons.get(asset, "•")
+                if not sm:
+                    # v11.1: Show searching state for empty slots
+                    p_str = f"${af.price:>10,.2f}" if af and af.n > 0 else "     ----"
+                    print(f"  {H1}│{R} {ic} {WARN}{asset.upper():3}{R}{DIM}{tf:3}{R} {BTC}{p_str}{R} {WARN}searching...{R}                     {H1}│{R}")
+                    continue
                 if not af or af.n == 0: continue
                 tl = (sm.end - datetime.now(timezone.utc)).total_seconds()
                 if tl < 0: continue
@@ -4581,13 +4589,22 @@ class Bot:
                      f"total={total_trades} W={wins} L={losses} "
                      f"BTC=${s.feed.price:,.0f} session_pnl=${s.cortex._session_pnl:+.0f}")
         
-        if not s.risk.ok(): return
+        if not s.risk.ok():
+            for st in s.strats:
+                if s.strats[st] == '...': s.strats[st] = 'risk limit'
+            return
         tl = (m.end - datetime.now(timezone.utc)).total_seconds()
         duration = m.timeframe * 60  # 300 for 5m, 900 for 15m
         min_tl = 30 if m.timeframe == 5 else 90  # 30s for 5m, 90s for 15m
-        if tl < min_tl: return
+        if tl < min_tl:
+            for st in s.strats:
+                if s.strats[st] == '...': s.strats[st] = f'expiring ({int(tl)}s)'
+            return
         av = s.risk.available
-        if av < 1.0: return
+        if av < 1.0:
+            for st in s.strats:
+                if s.strats[st] == '...': s.strats[st] = 'no balance'
+            return
 
         # ══ v11: GLOBAL FILTERS — enforced BEFORE any strategy ══
         # Live data from 162 trades proves these rules:
@@ -4647,7 +4664,10 @@ class Bot:
         # v9.1: Count ALL trades on this market (open + resolved) for hard cap
         resolved_count = len([p for p in s.risk.positions if p.status != "OPEN" and p.slug == m.slug])
         total_market_trades = open_count + resolved_count
-        if total_market_trades >= 2: return  # v11: was 5. Data: 1-2 orders = +$7,131. 4+ = -$6,175
+        if total_market_trades >= 2:  # v11: was 5. Data: 1-2 orders = +$7,131. 4+ = -$6,175
+            for st in s.strats: 
+                if s.strats[st] == "...": s.strats[st] = "market capped (2t)"
+            return
 
         # v7.1: 30-second minimum gap between entries on same market
         # Checks ALL trades (not just same strategy) to prevent pile-in
@@ -4684,7 +4704,10 @@ class Bot:
         # Total risk on this market (25% balance cap per market)
         market_risk = sum(p.cost for p in open_here)
         max_market_risk = s.risk.show_bal * 0.25  # v9.3: restored from 0.15 to v8.1's 0.25
-        if market_risk >= max_market_risk: return
+        if market_risk >= max_market_risk:
+            for st in s.strats:
+                if s.strats[st] == '...': s.strats[st] = 'risk capped'
+            return
 
         # v9.4: RULE 3 — Max 2 orders per market. Data shows:
         # v11.1: Max 2 entries per market. More than that = averaging into losers.
