@@ -3478,7 +3478,7 @@ class Dash:
         print(f"\n  {DIM}{'─'*62}")
         print(f"  Ctrl+C to stop{R}")
 
-# ─── MAIN BOT v10 ───
+# ─── MAIN BOT v11.1 ───
 class Bot:
     HISTORY_FILE = "trade_history.txt"
 
@@ -3605,7 +3605,7 @@ class Bot:
         s._past_trades = s._load_history()
         with open(s.HISTORY_FILE, "a") as f:
             f.write(f"\n{'='*60}\n")
-            f.write(f"  BOT v10.1 STARTED: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            f.write(f"  BOT v11.1 STARTED: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
             f.write(f"  Balance: ${s.risk.show_bal:.2f}\n")
             f.write(f"  Mode: {'LIVE' if not s.c.dry_run else 'DRY RUN'}\n")
             f.write(f"{'='*60}\n")
@@ -3680,7 +3680,7 @@ class Bot:
             w, l, wr = s.risk.stats()
             with open(s.HISTORY_FILE, "a") as f:
                 f.write(f"{'─'*60}\n")
-                f.write(f"  BOT v10.1 STOPPED: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+                f.write(f"  BOT v11.1 STOPPED: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
                 elapsed = int(time.time() - s.start_time)
                 hrs, rem = divmod(elapsed, 3600)
                 mins, secs = divmod(rem, 60)
@@ -3823,9 +3823,9 @@ class Bot:
         print(f"    Lifecycle model: {OK}{lc_markets}{R} markets profiled{' (empty — collecting)' if lc_markets == 0 else ''}")
         print(f"    Trust: " + "  ".join(f"{st[:3]}={s.cortex._trust[st]:.2f}x" for st in s.cortex.STRATS))
         print(f"\n  {H1}{'='*55}{R}")
-        print(f"  {'LIVE TRADING v10.1' if not s.c.dry_run else 'DRY RUN v10'}")
+        print(f"  {'LIVE TRADING v11.1' if not s.c.dry_run else 'DRY RUN v11.1'}")
         print(f"  {H1}{'='*55}{R}")
-        time.sleep(3); s._init_history(); s._sync_existing_positions(); s.dash.ev("Bot v10.1 started"); s._loop()
+        time.sleep(3); s._init_history(); s._sync_existing_positions(); s.dash.ev("Bot v11.1 started"); s._loop()
 
     def _set_slot_context(s, slot):
         """Switch the bot's context to trade a specific asset/timeframe slot.
@@ -4932,7 +4932,7 @@ class Bot:
                 else: s.strats["LATENCY"] = f"signal! {sig['dir']} price=${p:.2f}"
         elif True:
             if not _btc_moved:
-                s.strats["LATENCY"] = f"waiting btc≥0.10% (now {_chg_from_open*100:.2f}%)"
+                s.strats["LATENCY"] = f"waiting btc≥0.08% (now {_chg_from_open*100:.2f}%)"
             else:
                 s.strats["LATENCY"] = f"btc {s.feed.chg(60)*100:+.2f}%"
 
@@ -5056,7 +5056,7 @@ class Bot:
         os.system("cls" if os.name == "nt" else "clear")
         w, l, wr = s.risk.stats()
         print(f"\n{H1}{'═'*62}")
-        print(f"  {LBL}SESSION SUMMARY — BOT v10.1 — BACKTEST-OPTIMIZED{R}")
+        print(f"  {LBL}SESSION SUMMARY — BOT v11.1 — DATA-OPTIMIZED{R}")
         print(f"{H1}{'═'*62}{R}")
         print(f"  {LBL}Balance:{R}  {bal_c(s.risk.show_bal)} USDC")
         print(f"  {LBL}Real P&L:{R} {pnl_c2(s.risk.tpnl)}")
