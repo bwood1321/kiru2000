@@ -1,5 +1,5 @@
 """
-POLYMARKET BOT v10 — BACKTEST-OPTIMIZED ENGINE
+POLYMARKET BOT v10.1 — BACKTEST-OPTIMIZED ENGINE
 BTC (5m+15m) · ETH · SOL · XRP (15m)
 
 v9.5 changes:
@@ -117,7 +117,7 @@ class Config:
     min_trades_to_adapt: int = 15
     max_size_multiplier: float = 2.5
     min_size_multiplier: float = 0.3
-    streak_pause_count: int = 5     # v7.1: was 3, raised to 5 — data showed wins after 2-3 loss streaks
+    streak_pause_count: int = 8     # v10.1: was 5, raised to 8 — backtest had no pause and made +$8K
     streak_pause_sec: int = 1800
 
     # v9.5: Recovery mode — half sizes until balance recovers
@@ -230,7 +230,7 @@ class Feed:
         s.asset = asset
         s._sym_ws, s._sym_http, s._sym_cb = s.SYMBOLS.get(asset, s.SYMBOLS["btc"])
         s.data = deque(maxlen=1000)
-        s.s = requests.Session(); s.s.headers["User-Agent"] = "PolyBot/10"
+        s.s = requests.Session(); s.s.headers["User-Agent"] = "PolyBot/10.1"
         s._ws = None; s._ws_thread = None; s._ws_alive = False
         s._ws_last = 0; s._ws_retries = 0
         # Chainlink state
@@ -2077,11 +2077,11 @@ class S_Arb:
 class S_Latency:
     """LATENCY ARBITRAGE — buys when BTC moves but Polymarket hasn't repriced.
     
-    v9.5: Now uses Chainlink price as primary signal (settlement source).
-    Backtest showed 30% WR with Binance — because Binance != settlement price.
-    
-    Key change: Uses settlement_price (Chainlink) for direction, Binance for speed.
-    Both must agree or we skip."""
+    v10.1: Fixed the $0.53 coin-flip problem.
+    - Requires 0.15%+ BTC move from market OPEN (not 30s spike)
+    - Capped at $0.45 (not $0.55 — above $0.45 is coin flip territory)
+    - Confidence formula scaled down (was giving 70% on 0.1% moves)
+    - Uses Chainlink settlement price as truth."""
     def __init__(s, c): s.c = c
     def check(s, m, f, trend):
         if not s.c.latency_enabled or f.n < 10: return None
@@ -2089,51 +2089,66 @@ class S_Latency:
         min_tl = 120 if m.timeframe == 5 else 240
         if tl < min_tl: return None
 
-        # v9.5: Use BOTH Binance and Chainlink for direction
-        # Settlement is on Chainlink — it MUST agree
-        binance_chg_30 = f.chg(30)
-        binance_chg_60 = f.chg(60)
-        
-        # Chainlink direction (what actually settles the market)
-        cl_chg = f.cl_chg(120) if hasattr(f, 'cl_chg') else 0
-        
-        # How much has BTC moved vs market open?
+        # v10.1: PRIMARY signal = move from market open (this is what settles)
         chg_open = 0
         if m.open_btc > 0:
-            # Use settlement price if available
             settle_price = f.settlement_price if hasattr(f, 'settlement_price') else f.price
             if settle_price > 0:
                 chg_open = (settle_price - m.open_btc) / m.open_btc
         
-        chg = max(chg_open, binance_chg_30, binance_chg_60, key=abs)
-
-        min_chg = 0.0005 if (trend and trend.regime == "BREAKOUT") else 0.0007
+        # v10.1: SECONDARY = recent momentum (confirms direction, not primary)
+        binance_chg_30 = f.chg(30)
+        binance_chg_60 = f.chg(60)
+        
+        # v10.1: chg_open is the MAIN signal since that's what settles
+        # Only use 30s/60s as CONFIRMATION, not as the trigger
+        chg = chg_open
+        if abs(chg_open) < 0.0005:
+            # Open change is tiny → no real signal
+            return None
+        
+        # v10.1: Require 0.15% from open in normal, 0.10% in breakout
+        # Old: 0.10%/0.07% → way too sensitive, entered on noise
+        min_chg = 0.0010 if (trend and trend.regime == "BREAKOUT") else 0.0015
         if abs(chg) < min_chg: return None
-
+        
+        # Secondary momentum must AGREE (not contradict)
+        if binance_chg_30 != 0:
+            if (chg > 0 and binance_chg_30 < -0.0003) or (chg < 0 and binance_chg_30 > 0.0003):
+                return None  # BTC reversing in last 30s — don't chase
+        
         up = chg > 0
         
-        # v9.5: If Chainlink data available, MUST agree with direction
+        # v9.5: Chainlink must agree
+        cl_chg = f.cl_chg(120) if hasattr(f, 'cl_chg') else 0
         if cl_chg != 0:
             cl_up = cl_chg > 0
             if cl_up != up:
-                return None  # Binance says up, Chainlink says down — skip
+                return None  # Chainlink disagrees
 
         target_price = m.yes_p if up else m.no_p
-        # v10: wider range $0.15-$0.55 (was $0.15-$0.40)
-        # LAT2_wider: 939t, 53.6% WR, +$1,979 over 30 days
-        max_price = 0.55
-        if target_price > max_price or target_price < 0.15: return None
+        # v10.1: Hard cap $0.45 — above this is coin flip territory
+        # At $0.45: risk $0.45 to win $0.55 = need 45% WR (achievable)
+        # At $0.50: risk $0.50 to win $0.50 = need 50% WR (no edge)
+        # At $0.53: risk $0.53 to win $0.47 = need 53% WR (negative edge)
+        if target_price > 0.45 or target_price < 0.15: return None
 
         other_price = m.no_p if up else m.yes_p
         if other_price < 0.10: return None
 
-        confidence = min(0.95, 0.60 + abs(chg) * 100)
+        # v10.1: Realistic confidence — scaled to BTC move size
+        # 0.15% move = 55% conf, 0.30% move = 65% conf, 0.50%+ = 75% conf
+        # Old formula: 0.60 + abs(chg)*100 → gave 70% on 0.10% move (fantasy)
+        confidence = min(0.85, 0.50 + abs(chg) * 50)
         if trend and ((up and trend.trend_dir > 0) or (not up and trend.trend_dir < 0)):
-            confidence = min(0.95, confidence + 0.05)
+            confidence = min(0.88, confidence + 0.05)
 
         edge = confidence - target_price
-        # v10: lower edge threshold 0.10 (was 0.15)
-        if edge < 0.10: return None
+        # v10.1: need real edge — 0.08 minimum
+        # At $0.40 with 0.15% move: conf=0.575, edge=0.175 → PASS
+        # At $0.45 with 0.15% move: conf=0.575, edge=0.125 → PASS
+        # At $0.45 with 0.10% move: wouldn't reach here (min_chg blocks)
+        if edge < 0.08: return None
 
         return {"s": "LATENCY", "dir": "YES" if up else "NO", "yes": up,
                 "edge": edge, "pred": confidence, "p": target_price, "chg": chg, "sz": 0}
@@ -2280,9 +2295,9 @@ class S_Flash:
         # v10: 5-minute markets ONLY — backtest shows 15m drags down P&L
         if m.timeframe != 5: return None
         
-        # v10: Mid-price range $0.38-$0.55 (not cheap tokens)
-        yes_mid = 0.38 <= m.yes_p <= 0.55
-        no_mid = 0.38 <= m.no_p <= 0.55
+        # v10: Mid-price range $0.38-$0.48 (not above — $0.50+ is a coin flip)
+        yes_mid = 0.38 <= m.yes_p <= 0.48
+        no_mid = 0.38 <= m.no_p <= 0.48
         if not yes_mid and not no_mid: return None
         
         tl = (m.end - datetime.now(timezone.utc)).total_seconds()
@@ -2301,11 +2316,12 @@ class S_Flash:
             if settle_price > 0:
                 chg_open = (settle_price - m.open_btc) / m.open_btc
         
-        # Need clear direction (> 0.03% move from open)
-        if abs(chg_open) < 0.0003: return None
+        # v10.1: Need clear direction (> 0.12% move from open)
+        # 0.08% was too sensitive — bot entered on 0.02% noise and lost
+        if abs(chg_open) < 0.0012: return None
         
         # BTC up from open → YES should win → buy YES if mid-priced
-        if chg_open > 0.0003 and yes_mid:
+        if chg_open > 0.0012 and yes_mid:
             book_ok = True
             if book_intel and book_intel.yes_ask_depth > 0:
                 if book_intel.selling_pressure("YES"):
@@ -2314,7 +2330,7 @@ class S_Flash:
                 return {"s": "FLASH", "dir": "YES", "yes": True, "price": m.yes_p, "sz": 0}
         
         # BTC down from open → NO should win → buy NO if mid-priced
-        if chg_open < -0.0003 and no_mid:
+        if chg_open < -0.0012 and no_mid:
             book_ok = True
             if book_intel and book_intel.no_ask_depth > 0:
                 if book_intel.selling_pressure("NO"):
@@ -2587,7 +2603,7 @@ class S_Spike:
 # ─── MARKET FINDER ───
 class Finder:
     def __init__(s, c):
-        s.c = c; s.s = requests.Session(); s.s.headers["User-Agent"] = "PolyBot/10"; s.cache = {}
+        s.c = c; s.s = requests.Session(); s.s.headers["User-Agent"] = "PolyBot/10.1"; s.cache = {}
     def test(s):
         try:
             r = s.s.get(f"{s.c.gamma_host}/markets", params={"limit": 1}, timeout=10)
@@ -3329,7 +3345,7 @@ class Dash:
             else: cx_mode = f"{WARN}▽ CAREFUL{R}"
 
         print(f"\n  {H1}╔{'═'*62}╗{R}")
-        print(f"  {H1}║{R}  {H2}⬡ POLYMARKET BOT v10{R}           {DIM}{now}{R}  {DIM}⏱ {rt}{R}  {H1}║{R}")
+        print(f"  {H1}║{R}  {H2}⬡ POLYMARKET BOT v10.1{R}           {DIM}{now}{R}  {DIM}⏱ {rt}{R}  {H1}║{R}")
         print(f"  {H1}║{R}  {DIM}₿ BTC 5m+15m{R}  {DIM}Backtest-Optimized (30d/5174mkt){R}        {H1}║{R}")
         print(f"  {H1}║{R}  {DIM}Mode:{R} {mode}  {DIM}│{R}  {DIM}Cortex:{R} {cx_mode}  {DIM}│{R}  ", end="")
 
@@ -3798,7 +3814,7 @@ class Bot:
         s._past_trades = s._load_history()
         with open(s.HISTORY_FILE, "a") as f:
             f.write(f"\n{'='*60}\n")
-            f.write(f"  BOT v10 STARTED: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            f.write(f"  BOT v10.1 STARTED: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
             f.write(f"  Balance: ${s.risk.show_bal:.2f}\n")
             f.write(f"  Mode: {'LIVE' if not s.c.dry_run else 'DRY RUN'}\n")
             f.write(f"{'='*60}\n")
@@ -3873,7 +3889,7 @@ class Bot:
             w, l, wr = s.risk.stats()
             with open(s.HISTORY_FILE, "a") as f:
                 f.write(f"{'─'*60}\n")
-                f.write(f"  BOT v10 STOPPED: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+                f.write(f"  BOT v10.1 STOPPED: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
                 elapsed = int(time.time() - s.start_time)
                 hrs, rem = divmod(elapsed, 3600)
                 mins, secs = divmod(rem, 60)
@@ -3934,7 +3950,7 @@ class Bot:
 
     def run(s):
         os.system("cls" if os.name == "nt" else "clear")
-        print(f"\n  {H1}{'='*55}\n  |  POLYMARKET BOT v10 — BTC FOCUSED\n  |  BTC 5m + 15m | Backtest-Optimized\n  {'='*55}{R}\n")
+        print(f"\n  {H1}{'='*55}\n  |  POLYMARKET BOT v10.1 — BTC FOCUSED\n  |  BTC 5m + 15m | Backtest-Optimized\n  {'='*55}{R}\n")
         print(f"  {H2}[1/4]{R} Gamma..."); s.conn.gamma = "OK" if s.finder.test() else "FAILED"
         print(f"        {'OK' if s.conn.gamma == 'OK' else 'FAILED'}")
         print(f"  {H2}[2/4]{R} CLOB..."); s.conn.clob = "OK" if s.ex.test_public() else "FAILED"
@@ -4013,9 +4029,9 @@ class Bot:
         print(f"    Lifecycle model: {OK}{lc_markets}{R} markets profiled{' (empty — collecting)' if lc_markets == 0 else ''}")
         print(f"    Trust: " + "  ".join(f"{st[:3]}={s.cortex._trust[st]:.2f}x" for st in s.cortex.STRATS))
         print(f"\n  {H1}{'='*55}{R}")
-        print(f"  {'LIVE TRADING v10' if not s.c.dry_run else 'DRY RUN v10'}")
+        print(f"  {'LIVE TRADING v10.1' if not s.c.dry_run else 'DRY RUN v10'}")
         print(f"  {H1}{'='*55}{R}")
-        time.sleep(3); s._init_history(); s._sync_existing_positions(); s.dash.ev("Bot v10 started"); s._loop()
+        time.sleep(3); s._init_history(); s._sync_existing_positions(); s.dash.ev("Bot v10.1 started"); s._loop()
 
     def _set_slot_context(s, slot):
         """Switch the bot's context to trade a specific asset/timeframe slot.
@@ -4697,9 +4713,25 @@ class Bot:
             s._debug_times[_debug_key] = time.time()
             cl_div = abs(s.feed.price_divergence) if s.feed.cl_price > 0 else -1
             cl_age = s.feed.cl_age if hasattr(s.feed, 'cl_age') else -1
+            btc_chg = s.feed.chg(60) * 100 if s.feed.n > 10 else 0
+            chg_open = ((s.feed.price - m.open_btc) / m.open_btc * 100) if m.open_btc > 0 and s.feed.price > 0 else 0
             log.info(f"v10DBG {m.asset}-{m.timeframe}m Y={m.yes_p:.2f} N={m.no_p:.2f} "
                      f"sum={m.yes_p+m.no_p:.3f} tl={tl:.0f}s av=${av:.0f} "
-                     f"BTC=${s.feed.price:,.0f} cl_div={cl_div:.4f} cl_age={cl_age:.0f}s")
+                     f"BTC=${s.feed.price:,.0f} chg1m={btc_chg:+.2f}% open={chg_open:+.3f}% "
+                     f"cl_div={cl_div:.4f} cl_age={cl_age:.0f}s")
+        
+        # v10: ALIVE LOG — every 5 min, show comprehensive status
+        _alive_key = "_last_alive"
+        if not hasattr(s, '_alive_time'): s._alive_time = 0
+        if time.time() - s._alive_time > 300:
+            s._alive_time = time.time()
+            total_trades = sum(1 for p in s.risk.positions)
+            open_trades = sum(1 for p in s.risk.positions if p.status == "OPEN")
+            wins = sum(1 for p in s.risk.positions if getattr(p, 'result', '') == "WIN")
+            losses = sum(1 for p in s.risk.positions if getattr(p, 'result', '') == "LOSS")
+            log.info(f"v10ALIVE bal=${s.risk.show_bal:.0f} open={open_trades} "
+                     f"total={total_trades} W={wins} L={losses} "
+                     f"BTC=${s.feed.price:,.0f} session_pnl=${s.cortex._session_pnl:+.0f}")
 
         # v10: Chainlink divergence — reduce size but DON'T zero out
         # Stale Chainlink (30+ min old) shouldn't prevent ALL trading
@@ -4733,7 +4765,7 @@ class Bot:
         # v9.1: Count ALL trades on this market (open + resolved) for hard cap
         resolved_count = len([p for p in s.risk.positions if p.status != "OPEN" and p.slug == m.slug])
         total_market_trades = open_count + resolved_count
-        if total_market_trades >= 3: return  # v9.1: max 3 TOTAL trades per market
+        if total_market_trades >= 5: return  # v10: raised from 3 to 5 — backtest allows more
 
         # v7.1: 30-second minimum gap between entries on same market
         # Checks ALL trades (not just same strategy) to prevent pile-in
@@ -4848,16 +4880,25 @@ class Bot:
         if s.risk.show_bal < s.c.recovery_target:
             hard_max = min(hard_max, 200)
 
-        # v8: Per-market loss limit — reduce or block after losses on this market
+        # v10: Per-market loss limit — REDUCE, don't block
+        # Backtest didn't have this and made +$8K. Blocking kills trading.
         market_penalty = s.market_losses.get_penalty(m.slug)
-        # If already have positions open + a previous resolved loss, tighten up
-        if open_count >= 2 and market_penalty < 1.0:
-            market_penalty = 0.0  # 2 open + a resolved loss = stop adding
         if market_penalty <= 0.0:
-            # 2+ losses on this market — sit it out, wait for next market
-            for strat_key in ["LATENCY", "FLASH", "MEANREV", "SQUEEZE", "ARB", "PAIR", "SPIKE"]:
-                s.strats[strat_key] = "market stopped (2L)"
-            return
+            market_penalty = 0.3  # v10: 30% size instead of blocking entirely
+        
+        # v10.1: FULL STATE DEBUG — every 30s, show why strategies aren't firing
+        _dbg2_key = f"_dbg2_{m.slug}"
+        if time.time() - s._debug_times.get(_dbg2_key, 0) > 30:
+            s._debug_times[_dbg2_key] = time.time()
+            chg_from_open = ((s.feed.price - m.open_btc) / m.open_btc * 100) if m.open_btc > 0 and s.feed.price > 0 else 0
+            lo_p = min(m.yes_p, m.no_p)
+            hi_p = max(m.yes_p, m.no_p)
+            log.info(f"v10STATE {m.asset}-{m.timeframe}m "
+                     f"Y={m.yes_p:.2f} N={m.no_p:.2f} lo=${lo_p:.2f} "
+                     f"tl={tl:.0f}s open={chg_from_open:+.3f}% "
+                     f"sum={m.yes_p+m.no_p:.3f} pen={market_penalty:.1f} "
+                     f"open_pos={len(open_here)} resolved={resolved_count} "
+                     f"paused={[k for k in ['ARB','LATENCY','MEANREV','FLASH','SQUEEZE'] if s.sizer.is_paused(k)]}")
 
         # v8.1: FAST TREND SAFETY — catches trends before the regime engine does
         # If BTC moved 0.15%+ in last 2 min, block buying the opposite side
@@ -4905,9 +4946,10 @@ class Bot:
             # v9.4: PAIR exempt — its entire purpose is buying the OTHER side
             if locked_side and side != locked_side and strat != "PAIR":
                 return False, f"side lock ({locked_side})", 0
-            # v9.1: Hard cap 3 total trades per market (across ALL strategies)
-            if open_count + resolved_count >= 3:
-                return False, "market cap (3 trades)", 0
+            # v10.1: Hard cap 4 total trades per market
+            # Was 3 in allowed() but 5 in outer check — contradictory
+            if open_count + resolved_count >= 4:
+                return False, "market cap (4 trades)", 0
             # Market risk cap
             remaining_risk = max_market_risk - market_risk
             if remaining_risk < 1.0 and open_count > 0:
@@ -4936,10 +4978,10 @@ class Bot:
         if sig and not s.sizer.is_paused("ARB"):
             ok, reason, same_count = allowed("ARB", sig["side"], sig["price"])
             if ok:
-                sz = s.sizer.get_size("ARB", s.c.get_base_size("ARB", s.risk.show_bal), s.risk.show_bal, same_strat_count=same_count)
-                sz = sz * s.cortex.get_trust("ARB", slot_key=slot_key) * s.cortex.get_session_mult() * s.cortex.get_danger_mult()  # v9: Cortex
+                # v10 LEAN: Simple sizing like the backtest. No multiplier chain.
+                sz = s.c.get_base_size("ARB", s.risk.show_bal)
+                sz = sz * market_penalty * _cl_mult
                 sz = min(sz, av, max_market_risk - market_risk, hard_max)
-                sz = sz * _counter_trend_mult * _cl_mult  # v9.5: counter-trend + chainlink
                 if sz >= 1.0:
                     s.strats["ARB"] = f"ACTIVE {sig['side']} pair=${sig['pair']:.4f}"
                     s.dash.ev(f"[{slot_label}·ARB] {sig['side']} ${sz:.2f} pair=${sig['pair']:.3f}")
@@ -4960,138 +5002,91 @@ class Bot:
 
         # ── S2: LATENCY (speed-based, fires immediately) ──
         sig = s.s2.check(m, s.feed, s.trend)
-        if sig and lat_ok and time.time() - s.cd.get(f"lat:{slot_key}", 0) > 15 and not s.sizer.is_paused("LATENCY") and not bad_hour:
+        if sig and lat_ok and time.time() - s.cd.get(f"lat:{slot_key}", 0) > 15 and not s.sizer.is_paused("LATENCY"):
             p = sig["p"]
-            # v7: Momentum guard — block counter-trend in sustained trends
-            if s.momentum_guard.should_block(sig["yes"]):
-                s.strats["LATENCY"] = f"momentum guard ({s.momentum_guard.sustained_minutes:.0f}m)"
+            ok, reason, same_count = allowed("LATENCY", sig["dir"], p)
+            if not ok:
+                s.strats["LATENCY"] = reason
             else:
-                ok, reason, same_count = allowed("LATENCY", sig["dir"], p)
-                if not ok:
-                    s.strats["LATENCY"] = reason
-                else:
-                    should, trend_mult = s.trend.should_trade("LATENCY", sig["yes"])
-                    if should and not s.sizer.is_side_cold(sig["dir"]):
-                        sz = s.sizer.get_size("LATENCY", s.c.get_base_size("LATENCY", s.risk.show_bal), s.risk.show_bal, same_strat_count=same_count)
-                        sz = sz * trend_mult
-                        # v7: Apply conviction bonus, win streak, time-of-day
-                        conv_bonus = s.conviction.get_bonus(m.slug, sig["dir"])
-                        sz = sz * conv_bonus * streak_mult * tod_mult * market_penalty
-                        sz = sz * s.cortex.get_trust("LATENCY", slot_key=slot_key) * s.cortex.get_macro_mult(sig.get("dir", sig.get("side", "YES")), asset=m.asset) * s.cortex.get_session_mult() * s.cortex.get_danger_mult() * s.cortex.get_side_mult(sig["dir"]) * (lc_yes if sig["dir"] == "YES" else lc_no)  # v9: Cortex + Lifecycle
-                        sz = min(sz, av, max_market_risk - market_risk, hard_max)
-                        sz = sz * _counter_trend_mult * _cl_mult  # v9.5: counter-trend + chainlink
-                        if sz >= 1.0 and 0.08 <= p <= 0.88:
-                            # No confirmation delay — latency edge IS speed
-                            bonus_tag = f" CONV:{conv_bonus:.1f}x" if conv_bonus > 1 else ""
-                            s.strats["LATENCY"] = f"ACTIVE {sig['dir']} edge={sig['edge']*100:.1f}%{bonus_tag}"
-                            sh = max(sz / p, 5.0)
-                            if sh * p > av: sh = av / p
-                            s.dash.ev(f"[{slot_label}·LAT] {sig['dir']} ${sz:.2f} BTC{sig['chg']*100:+.2f}%")
-                            oid, actual_shares = s.ex.order(m, sig["yes"], p, sh, mode="maker")
-                            if oid:
-                                t = Trd(datetime.now(timezone.utc), "LATENCY", m.slug, sig["dir"], p, sz, oid=oid)
-                                s.risk.open(t, market_end=m.end, actual_shares=actual_shares, entry_regime=s.trend.regime if s.trend else "UNKNOWN"); s.cd[f"lat:{slot_key}"] = time.time()
-                                s._recent_entries.append((time.time(), t.side, slot_key))
-                                if m.cid: s._traded_cids.add(m.cid); s._save_traded_cids()
-                                # v7: Record conviction
-                                s.conviction.record_signal(m.slug, "LATENCY", sig["dir"])
-                                # v8.1: Latency gets 60s alone — other strats don't pile on
-                                s.cd[f"lat_iso:{slot_key}"] = time.time()
-                                s._beep()
-                        else: s.strats["LATENCY"] = f"signal! {sig['dir']} price=${p:.2f}"
-                    else:
-                        s.strats["LATENCY"] = f"reduced ({s.trend.regime})"
-        elif not bad_hour:
+                sz = s.c.get_base_size("LATENCY", s.risk.show_bal)
+                sz = sz * market_penalty * _cl_mult
+                sz = min(sz, av, max_market_risk - market_risk, hard_max)
+                if sz >= 1.0 and 0.08 <= p <= 0.88:
+                    s.strats["LATENCY"] = f"ACTIVE {sig['dir']} edge={sig['edge']*100:.1f}%"
+                    sh = max(sz / p, 5.0)
+                    if sh * p > av: sh = av / p
+                    s.dash.ev(f"[{slot_label}·LAT] {sig['dir']} ${sz:.2f} BTC{sig['chg']*100:+.2f}%")
+                    oid, actual_shares = s.ex.order(m, sig["yes"], p, sh, mode="maker")
+                    if oid:
+                        t = Trd(datetime.now(timezone.utc), "LATENCY", m.slug, sig["dir"], p, sz, oid=oid)
+                        s.risk.open(t, market_end=m.end, actual_shares=actual_shares, entry_regime=s.trend.regime if s.trend else "UNKNOWN"); s.cd[f"lat:{slot_key}"] = time.time()
+                        s._recent_entries.append((time.time(), t.side, slot_key))
+                        if m.cid: s._traded_cids.add(m.cid); s._save_traded_cids()
+                        s.conviction.record_signal(m.slug, "LATENCY", sig["dir"])
+                        s.cd[f"lat_iso:{slot_key}"] = time.time()
+                        s._beep()
+                else: s.strats["LATENCY"] = f"signal! {sig['dir']} price=${p:.2f}"
+        elif True:
             s.strats["LATENCY"] = f"btc {s.feed.chg(60)*100:+.2f}%"
 
-        # ── S3: MEAN REVERSION (v8: replaces dead Momentum — buys the bounce) ──
-        # v8.1: Don't fire if Latency has an open position (protect the crown jewel)
+        # ── S3: MEAN REVERSION (buys the bounce at $0.10-$0.45) ──
         latency_open = any(p.strat == "LATENCY" and p.status == "OPEN" for p in open_here)
-        lat_isolate = time.time() - s.cd.get(f"lat_iso:{slot_key}", 0) < 20  # v9.5: was 60s, too long for 5m markets
-        sig = None if s.cortex.is_disabled("MEANREV") else s.s3.check(m, s.feed, s.trend, s.token_feed, s.book_intel)
-        if s.cortex.is_disabled("MEANREV"): s.strats["MEANREV"] = "☠ disabled"
-        if sig and mom_ok and not latency_open and not lat_isolate and time.time() - s.cd.get(f"mrev:{slot_key}", 0) > 20 and not s.sizer.is_paused("MEANREV") and not bad_hour:
+        lat_isolate = time.time() - s.cd.get(f"lat_iso:{slot_key}", 0) < 8  # v10.1: was 20s, too long for 5m markets
+        sig = s.s3.check(m, s.feed, s.trend, s.token_feed, s.book_intel)
+        if sig and mom_ok and not latency_open and not lat_isolate and time.time() - s.cd.get(f"mrev:{slot_key}", 0) > 20 and not s.sizer.is_paused("MEANREV"):
             p = sig["price"]
-            if s.momentum_guard.should_block(sig["yes"]):
-                s.strats["MEANREV"] = f"momentum guard"
+            ok, reason, same_count = allowed("MEANREV", sig["dir"], p)
+            if not ok:
+                s.strats["MEANREV"] = reason
             else:
-                ok, reason, same_count = allowed("MEANREV", sig["dir"], p)
-                if not ok:
-                    s.strats["MEANREV"] = reason
-                else:
-                    should, trend_mult = s.trend.should_trade("MOMENTUM", sig["yes"])  # uses MOMENTUM rules
-                    if should and not s.sizer.is_side_cold(sig["dir"]):
-                        sz = s.sizer.get_size("MEANREV", s.c.get_base_size("MOMENTUM", s.risk.show_bal), s.risk.show_bal, same_strat_count=same_count)
-                        sz = sz * trend_mult
-                        conv_bonus = s.conviction.get_bonus(m.slug, sig["dir"])
-                        sz = sz * conv_bonus * streak_mult * tod_mult * market_penalty
-                        sz = sz * s.cortex.get_trust("MEANREV", slot_key=slot_key) * s.cortex.get_macro_mult(sig.get("dir", sig.get("side", "YES")), asset=m.asset) * s.cortex.get_session_mult() * s.cortex.get_danger_mult() * s.cortex.get_side_mult(sig["dir"]) * (lc_yes if sig["dir"] == "YES" else lc_no)  # v9: Cortex + Lifecycle
-                        sz = min(sz, av, max_market_risk - market_risk, hard_max)
-                        sz = sz * _counter_trend_mult * _cl_mult  # v9.5: counter-trend + chainlink
-                        if sz >= 1.0 and 0.10 <= p <= 0.35:
-                            drop_pct = sig.get("drop", 0) * 100
-                            s.strats["MEANREV"] = f"BOUNCE {sig['dir']} drop:{drop_pct:.0f}% vel:{sig.get('velocity',0):.3f}"
-                            sh = max(sz / p, 5.0)
-                            if sh * p > av: sh = av / p
-                            s.dash.ev(f"[{slot_label}·MREV] {sig['dir']} ${sz:.2f} bounce drop:{drop_pct:.0f}%")
-                            oid, actual_shares = s.ex.order(m, sig["yes"], p, sh)
-                            if oid:
-                                t = Trd(datetime.now(timezone.utc), "MEANREV", m.slug, sig["dir"], p, sz, oid=oid)
-                                s.risk.open(t, market_end=m.end, actual_shares=actual_shares, entry_regime=s.trend.regime if s.trend else "UNKNOWN"); s.cd[f"mrev:{slot_key}"] = time.time()
-                                s._recent_entries.append((time.time(), t.side, slot_key))
-                                if m.cid: s._traded_cids.add(m.cid); s._save_traded_cids()
-                                s.conviction.record_signal(m.slug, "MEANREV", sig["dir"])
-                                s._beep()
-                        else: s.strats["MEANREV"] = f"signal! {sig['dir']} p=${p:.2f}"
-                    else:
-                        reason = "against trend" if not should else "side cold"
-                        s.strats["MEANREV"] = f"blocked ({reason})"
-        elif not bad_hour:
+                sz = s.c.get_base_size("MOMENTUM", s.risk.show_bal)
+                sz = sz * market_penalty * _cl_mult
+                sz = min(sz, av, max_market_risk - market_risk, hard_max)
+                if sz >= 1.0 and 0.10 <= p <= 0.48:
+                    drop_pct = sig.get("drop", 0) * 100
+                    s.strats["MEANREV"] = f"BOUNCE {sig['dir']} drop:{drop_pct:.0f}% vel:{sig.get('velocity',0):.3f}"
+                    sh = max(sz / p, 5.0)
+                    if sh * p > av: sh = av / p
+                    s.dash.ev(f"[{slot_label}·MREV] {sig['dir']} ${sz:.2f} bounce drop:{drop_pct:.0f}%")
+                    oid, actual_shares = s.ex.order(m, sig["yes"], p, sh)
+                    if oid:
+                        t = Trd(datetime.now(timezone.utc), "MEANREV", m.slug, sig["dir"], p, sz, oid=oid)
+                        s.risk.open(t, market_end=m.end, actual_shares=actual_shares, entry_regime=s.trend.regime if s.trend else "UNKNOWN"); s.cd[f"mrev:{slot_key}"] = time.time()
+                        s._recent_entries.append((time.time(), t.side, slot_key))
+                        if m.cid: s._traded_cids.add(m.cid); s._save_traded_cids()
+                        s.conviction.record_signal(m.slug, "MEANREV", sig["dir"])
+                        s._beep()
+                else: s.strats["MEANREV"] = f"signal! {sig['dir']} p=${p:.2f}"
+        else:
             s.strats["MEANREV"] = f"scanning"
 
-        # ── S4: FLASH (v8: order book aware + volatility gated) ──
+        # ── S4: FLASH (settlement follower, 5m only, $0.38-$0.48) ──
         sig = s.s4.check(m, s.feed, s.trend, s.token_feed, s.book_intel)
-        if sig and flash_ok and not lat_isolate and time.time() - s.cd.get(f"flash:{slot_key}", 0) > 30 and not s.sizer.is_paused("FLASH") and not bad_hour:
+        if sig and flash_ok and not lat_isolate and time.time() - s.cd.get(f"flash:{slot_key}", 0) > 30 and not s.sizer.is_paused("FLASH"):
             p = sig["price"]
-            if s.momentum_guard.should_block(sig["yes"]):
-                s.strats["FLASH"] = f"momentum guard"
+            ok, reason, same_count = allowed("FLASH", sig["dir"], p)
+            if not ok:
+                s.strats["FLASH"] = reason
             else:
-                ok, reason, same_count = allowed("FLASH", sig["dir"], p)
-                if not ok:
-                    s.strats["FLASH"] = reason
+                sz = s.c.get_base_size("FLASH", s.risk.show_bal)
+                sz = sz * market_penalty * _cl_mult
+                sz = min(sz, av, max_market_risk - market_risk, hard_max, 250.0)
+                if sz >= 1.0:
+                    s.strats["FLASH"] = f"ACTIVE {sig['dir']} @ ${p:.4f}"
+                    sh = max(sz / p, 5.0)
+                    if sh * p > av: sh = av / p
+                    s.dash.ev(f"[{slot_label}·FLASH] {sig['dir']} ${sz:.2f} @ ${p:.4f}")
+                    oid, actual_shares = s.ex.order(m, sig["yes"], p, sh)
+                    if oid:
+                        t = Trd(datetime.now(timezone.utc), "FLASH", m.slug, sig["dir"], p, sz, oid=oid)
+                        s.risk.open(t, market_end=m.end, actual_shares=actual_shares, entry_regime=s.trend.regime if s.trend else "UNKNOWN"); s.cd[f"flash:{slot_key}"] = time.time()
+                        s._recent_entries.append((time.time(), t.side, slot_key))
+                        if m.cid: s._traded_cids.add(m.cid); s._save_traded_cids()
+                        s.conviction.record_signal(m.slug, "FLASH", sig["dir"])
+                        s._beep()
                 else:
-                    should, trend_mult = s.trend.should_trade("FLASH", sig["yes"])
-                    if should and not s.sizer.is_side_cold(sig["dir"]):
-                        sz = s.sizer.get_size("FLASH", s.c.get_base_size("FLASH", s.risk.show_bal), s.risk.show_bal, same_strat_count=same_count)
-                        sz = sz * trend_mult
-                        conv_bonus = s.conviction.get_bonus(m.slug, sig["dir"])
-                        sz = sz * conv_bonus * streak_mult * tod_mult * market_penalty
-                        sz = sz * s.cortex.get_trust("FLASH", slot_key=slot_key) * s.cortex.get_macro_mult(sig.get("dir", sig.get("side", "YES")), asset=m.asset) * s.cortex.get_session_mult() * s.cortex.get_danger_mult() * s.cortex.get_side_mult(sig["dir"]) * (lc_yes if sig["dir"] == "YES" else lc_no)  # v9: Cortex + Lifecycle
-                        sz = min(sz, av, max_market_risk - market_risk, hard_max)
-                        sz = sz * _counter_trend_mult * _cl_mult  # v9.5: counter-trend + chainlink
-                        # v9.1: Flash hard cap $250 — data: $400-$570 Flash bets lost -$1,964 total
-                        # Flash is a VALUE play, not a SIZE play. Keep bets small, let R:R do the work.
-                        sz = min(sz, 250.0)
-                        if sz >= 1.0:
-                            bonus_tag = f" CONV:{conv_bonus:.1f}x" if conv_bonus > 1 else ""
-                            s.strats["FLASH"] = f"ACTIVE {sig['dir']} @ ${p:.4f}{bonus_tag}"
-                            sh = max(sz / p, 5.0)
-                            if sh * p > av: sh = av / p
-                            s.dash.ev(f"[{slot_label}·FLASH] {sig['dir']} ${sz:.2f} @ ${p:.4f}")
-                            oid, actual_shares = s.ex.order(m, sig["yes"], p, sh)
-                            if oid:
-                                t = Trd(datetime.now(timezone.utc), "FLASH", m.slug, sig["dir"], p, sz, oid=oid)
-                                s.risk.open(t, market_end=m.end, actual_shares=actual_shares, entry_regime=s.trend.regime if s.trend else "UNKNOWN"); s.cd[f"flash:{slot_key}"] = time.time()
-                                s._recent_entries.append((time.time(), t.side, slot_key))
-                                if m.cid: s._traded_cids.add(m.cid); s._save_traded_cids()
-                                s.conviction.record_signal(m.slug, "FLASH", sig["dir"])
-                                s._beep()
-                        else:
-                            s.strats["FLASH"] = f"signal! {sig['dir']} sz too small"
-                    else:
-                        reason = "against trend" if not should else "side cold"
-                        s.strats["FLASH"] = f"blocked ({reason})"
-        elif not bad_hour:
+                    s.strats["FLASH"] = f"signal! {sig['dir']} sz too small"
+        else:
             s.strats["FLASH"] = f"lo=${min(m.yes_p, m.no_p):.4f}"
 
         # ── S5: SQUEEZE → LATE GAME (lottery + snipe) ──
@@ -5243,7 +5238,7 @@ class Bot:
         os.system("cls" if os.name == "nt" else "clear")
         w, l, wr = s.risk.stats()
         print(f"\n{H1}{'═'*62}")
-        print(f"  {LBL}SESSION SUMMARY — BOT v10 — BACKTEST-OPTIMIZED{R}")
+        print(f"  {LBL}SESSION SUMMARY — BOT v10.1 — BACKTEST-OPTIMIZED{R}")
         print(f"{H1}{'═'*62}{R}")
         print(f"  {LBL}Balance:{R}  {bal_c(s.risk.show_bal)} USDC")
         print(f"  {LBL}Real P&L:{R} {pnl_c2(s.risk.tpnl)}")
