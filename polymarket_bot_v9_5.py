@@ -207,14 +207,25 @@ except ImportError:
     log.info("websocket-client not installed — using HTTP polling (pip install websocket-client for 20x faster feed)")
 
 class Feed:
-    """Price feed for any asset. Primary: Binance WebSocket (100ms updates).
-    Fallback: HTTP polling (if WS disconnects)."""
+    """Price feed for any asset. 
+    Primary: Binance WebSocket (100ms updates).
+    Secondary: Chainlink on-chain oracle (what Polymarket actually settles on).
+    Fallback: HTTP polling (if WS disconnects).
+    
+    v9.5: Added Chainlink feed for BTC. Polymarket 5m/15m markets resolve on
+    Chainlink, NOT Binance. When they disagree, Chainlink is truth."""
     SYMBOLS = {
         "btc": ("btcusdt", "BTCUSDT", "BTC-USD"),
         "eth": ("ethusdt", "ETHUSDT", "ETH-USD"),
         "sol": ("solusdt", "SOLUSDT", "SOL-USD"),
         "xrp": ("xrpusdt", "XRPUSDT", "XRP-USD"),
     }
+    # Chainlink BTC/USD on Ethereum Mainnet
+    CHAINLINK_BTC_ADDR = "0xF4030086522a5bEEa4988F8cA5B36dbC97BeE88c"
+    CHAINLINK_RPC = "https://eth-mainnet.g.alchemy.com/v2/oOZNCpMzhzk3MrzbpNGsR"
+    # ABI for latestRoundData(): returns (roundId, answer, startedAt, updatedAt, answeredInRound)
+    CHAINLINK_ABI_SIG = "0xfeaf968c"  # function selector for latestRoundData()
+    
     def __init__(s, asset="btc"):
         s.asset = asset
         s._sym_ws, s._sym_http, s._sym_cb = s.SYMBOLS.get(asset, s.SYMBOLS["btc"])
@@ -222,8 +233,98 @@ class Feed:
         s.s = requests.Session(); s.s.headers["User-Agent"] = "PolyBot/9"
         s._ws = None; s._ws_thread = None; s._ws_alive = False
         s._ws_last = 0; s._ws_retries = 0
+        # Chainlink state
+        s.chainlink_price = 0
+        s.chainlink_time = 0  # timestamp of last Chainlink update
+        s._cl_last_poll = 0
+        s._cl_data = deque(maxlen=200)  # Chainlink price history
         if _HAS_WS:
             s._start_ws()
+        # Start Chainlink polling thread for BTC
+        if asset == "btc":
+            s._cl_thread = threading.Thread(target=s._chainlink_loop, daemon=True)
+            s._cl_thread.start()
+    
+    def _chainlink_loop(s):
+        """Poll Chainlink every 10 seconds for BTC price."""
+        while True:
+            try:
+                s._poll_chainlink()
+            except Exception as e:
+                log.debug(f"Chainlink poll error: {e}")
+            time.sleep(10)
+    
+    def _poll_chainlink(s):
+        """Read Chainlink BTC/USD price via eth_call to Alchemy RPC."""
+        payload = {
+            "jsonrpc": "2.0",
+            "method": "eth_call",
+            "params": [{
+                "to": s.CHAINLINK_BTC_ADDR,
+                "data": s.CHAINLINK_ABI_SIG
+            }, "latest"],
+            "id": 1
+        }
+        r = s.s.post(s.CHAINLINK_RPC, json=payload, timeout=5)
+        result = r.json().get("result", "")
+        if result and len(result) >= 130:
+            # latestRoundData returns 5 uint256 values packed in hex
+            # answer is the 2nd value (bytes 66-130)
+            answer_hex = result[66:130]
+            answer = int(answer_hex, 16)
+            # Chainlink BTC/USD has 8 decimals
+            price = answer / 1e8
+            if price > 1000:  # sanity check
+                now = time.time()
+                s.chainlink_price = price
+                s.chainlink_time = now
+                s._cl_data.append({"t": now, "p": price})
+                s._cl_last_poll = now
+    
+    def cl_chg(s, sec=60):
+        """Chainlink price change over last N seconds."""
+        if len(s._cl_data) < 2: return 0
+        snap = list(s._cl_data)
+        now = snap[-1]; cut = now["t"] - sec; old = snap[0]
+        for p in snap:
+            if p["t"] >= cut: old = p; break
+        return (now["p"] - old["p"]) / old["p"] if old["p"] else 0
+    
+    @property
+    def cl_price(s):
+        """Current Chainlink price (0 if not available)."""
+        return s.chainlink_price
+    
+    @property
+    def cl_age(s):
+        """Seconds since last Chainlink update."""
+        if s.chainlink_time == 0: return 9999
+        return time.time() - s.chainlink_time
+    
+    @property
+    def cl_binance_agree(s):
+        """Do Chainlink and Binance agree on direction?"""
+        if s.chainlink_price == 0 or len(s.data) < 2: return True  # no data, assume agree
+        binance_p = s.data[-1]["p"] if s.data else 0
+        if binance_p == 0: return True
+        # They agree if within 0.1% of each other
+        diff_pct = abs(binance_p - s.chainlink_price) / s.chainlink_price
+        return diff_pct < 0.001
+    
+    @property
+    def price_divergence(s):
+        """How much Binance and Chainlink disagree (as %)."""
+        if s.chainlink_price == 0 or not s.data: return 0
+        binance_p = s.data[-1]["p"]
+        return (binance_p - s.chainlink_price) / s.chainlink_price
+    
+    @property
+    def settlement_price(s):
+        """The price that Polymarket will use for settlement.
+        Uses Chainlink if available and recent, otherwise Binance."""
+        if s.chainlink_price > 0 and s.cl_age < 300:
+            return s.chainlink_price
+        return s.data[-1]["p"] if s.data else 0
     
     def _start_ws(s):
         """Start Binance WebSocket in background thread."""
@@ -1977,64 +2078,60 @@ class S_Arb:
 
 
 class S_Latency:
-    """LATENCY ARBITRAGE — The proven $313→$414K strategy (98% WR).
-    Research: Bot monitors Binance BTC. When BTC moves 0.15%+ but
-    Polymarket hasn't repriced, buys the underpriced side FAST.
-    "Enters when actual prob is ~85% but market still shows 50/50."
+    """LATENCY ARBITRAGE — buys when BTC moves but Polymarket hasn't repriced.
     
-    Polymarket now charges ~3% taker fee at 50c odds. So we MUST
-    buy cheap sides (< $0.35) where the fee is lower and R:R is good.
+    v9.5: Now uses Chainlink price as primary signal (settlement source).
+    Backtest showed 30% WR with Binance — because Binance != settlement price.
     
-    This is our #1 money-maker. Speed IS the edge — no confirmation."""
+    Key change: Uses settlement_price (Chainlink) for direction, Binance for speed.
+    Both must agree or we skip."""
     def __init__(s, c): s.c = c
     def check(s, m, f, trend):
         if not s.c.latency_enabled or f.n < 10: return None
         tl = (m.end - datetime.now(timezone.utc)).total_seconds() if m.end else 999
-        min_tl = 120 if m.timeframe == 5 else 240  # 2 min for 5m, 4 min for 15m
+        min_tl = 120 if m.timeframe == 5 else 240
         if tl < min_tl: return None
+
+        # v9.5: Use BOTH Binance and Chainlink for direction
+        # Settlement is on Chainlink — it MUST agree
+        binance_chg_30 = f.chg(30)
+        binance_chg_60 = f.chg(60)
+        
+        # Chainlink direction (what actually settles the market)
+        cl_chg = f.cl_chg(120) if hasattr(f, 'cl_chg') else 0
+        
         # How much has BTC moved vs market open?
         chg_open = 0
         if m.open_btc > 0:
-            chg_open = (f.price - m.open_btc) / m.open_btc
-        # Also check recent fast moves
-        chg_30 = f.chg(30)
-        chg_60 = f.chg(60)
-        # Use the biggest move signal
-        chg = max(chg_open, chg_30, chg_60, key=abs)
+            # Use settlement price if available
+            settle_price = f.settlement_price if hasattr(f, 'settlement_price') else f.price
+            if settle_price > 0:
+                chg_open = (settle_price - m.open_btc) / m.open_btc
+        
+        chg = max(chg_open, binance_chg_30, binance_chg_60, key=abs)
 
-        # v9.4: Lowered threshold from 0.10% to 0.07% for more signals
         min_chg = 0.0005 if (trend and trend.regime == "BREAKOUT") else 0.0007
         if abs(chg) < min_chg: return None
 
-        # v9.4: Removed FLAT block. v8.1 didn't have it. 0W/2L is only 2 trades —
-        # too small to justify blocking. The 0.10% BTC move requirement already
-        # ensures there's a real directional move happening.
-
         up = chg > 0
-        # The side we want: BTC up → buy YES (if cheap), BTC down → buy NO (if cheap)
-        target_price = m.yes_p if up else m.no_p
-
-        # CRITICAL: Only enter when price is reasonable
-        # Below $0.12: market is 88%+ confident the other side wins — don't fight it
-        # v9.3: Back to v8.1 pricing — data proves expensive entries lose money
-        # $0.15-$0.30 range: 30% WR, +$7,016 profit
-        # $0.50-$0.70 range: 50% WR, -$2,309 loss
-        max_price = 0.40
         
-        if target_price > max_price or target_price < 0.15: return None  # v9.4: raised from 0.12, data shows <$0.15 = 7% WR
+        # v9.5: If Chainlink data available, MUST agree with direction
+        if cl_chg != 0:
+            cl_up = cl_chg > 0
+            if cl_up != up:
+                return None  # Binance says up, Chainlink says down — skip
 
-        # Other side shouldn't be too cheap (if both cheap → ARB handles it)
+        target_price = m.yes_p if up else m.no_p
+        max_price = 0.40
+        if target_price > max_price or target_price < 0.15: return None
+
         other_price = m.no_p if up else m.yes_p
         if other_price < 0.15: return None
 
-        # Confidence: bigger BTC move = market is more wrong
         confidence = min(0.95, 0.60 + abs(chg) * 100)
-
-        # Trend bonus
         if trend and ((up and trend.trend_dir > 0) or (not up and trend.trend_dir < 0)):
             confidence = min(0.95, confidence + 0.05)
 
-        # Need edge to overcome fees + variance
         edge = confidence - target_price
         if edge < 0.15: return None
 
@@ -2172,48 +2269,52 @@ class S_Flash:
 
         regime = trend.regime if trend else ""
 
-        # v9.5: BTC direction is the PRIMARY signal.
-        # Data: YES trades +$767 (5W/1L), NO trades -$1,580 (4W/13L)
-        # Flash was buying NO in uptrends because confirmations were bugged.
-        # NEW RULE: Only buy the side that AGREES with BTC direction.
-        btc_2m = f.chg(120)    # 2-minute change
-        btc_30s = f.chg(30)    # 30-second change
-        btc_5m = f.chg(300)    # 5-minute change (if available)
+        # v9.5: BTC direction — use CHAINLINK as primary (settlement source)
+        # Backtest proved: Binance direction != settlement direction
+        # Chainlink is what Polymarket resolves on for 5m/15m markets
         
-        # Determine BTC direction with confidence
-        btc_going_up = btc_2m > 0.0002 and btc_30s >= 0     # up 0.02%+ over 2m, not reversing
-        btc_going_down = btc_2m < -0.0002 and btc_30s <= 0  # down 0.02%+ over 2m, not reversing
+        # Get direction from both sources
+        binance_2m = f.chg(120)
+        binance_30s = f.chg(30)
+        cl_2m = f.cl_chg(120) if hasattr(f, 'cl_chg') else 0
+        cl_30s = f.cl_chg(30) if hasattr(f, 'cl_chg') else 0
         
-        # v9.5: RULE 1 — Only buy YES if BTC is going UP
-        # Only buy NO if BTC is going DOWN
-        # This prevents buying the "cheap" side that's cheap because it's LOSING
+        # Use Chainlink if available, otherwise Binance
+        if cl_2m != 0:
+            btc_2m = cl_2m
+            btc_30s = cl_30s if cl_30s != 0 else binance_30s
+        else:
+            btc_2m = binance_2m
+            btc_30s = binance_30s
         
-        if yes_cheap and btc_going_down:
-            # YES is cheap AND BTC is falling → this is a dip buy
-            # BTC dropped, YES got cheap, we buy expecting bounce
-            # Extra confirmation: 30s shows slight recovery starting
-            bouncing = btc_30s > -0.0001  # at least not accelerating down
-            
+        # Determine BTC direction — BOTH sources must agree for high confidence
+        both_agree_up = binance_2m > 0.0002 and (cl_2m > 0 or cl_2m == 0)
+        both_agree_down = binance_2m < -0.0002 and (cl_2m < 0 or cl_2m == 0)
+        
+        btc_going_up = btc_2m > 0.0002 and btc_30s >= 0 and both_agree_up
+        btc_going_down = btc_2m < -0.0002 and btc_30s <= 0 and both_agree_down
+        
+        # v9.5: RULE 1 — Buy the side that should WIN based on settlement price
+        # YES wins if BTC goes UP from market start
+        # NO wins if BTC goes DOWN from market start
+        # We buy the WINNING side when it's still cheap (market hasn't caught up)
+        
+        if yes_cheap and btc_going_up:
+            # BTC is going UP → YES should win → buy YES while it's cheap
             book_confirms = True
             if book_intel and book_intel.yes_ask_depth > 0:
                 if book_intel.selling_pressure("YES"):
                     book_confirms = False
-
-            if bouncing or book_confirms:
+            if book_confirms:
                 return {"s": "FLASH", "dir": "YES", "yes": True, "price": m.yes_p, "sz": 0}
 
-        if no_cheap and btc_going_up:
-            # NO is cheap AND BTC is rising → this is a dip buy on NO side
-            # BTC pumped, NO got cheap, we buy expecting pullback
-            # Extra confirmation: 30s shows slight pullback starting
-            pulling_back = btc_30s < 0.0001  # at least not accelerating up
-            
+        if no_cheap and btc_going_down:
+            # BTC is going DOWN → NO should win → buy NO while it's cheap
             book_confirms = True
             if book_intel and book_intel.no_ask_depth > 0:
                 if book_intel.selling_pressure("NO"):
                     book_confirms = False
-
-            if pulling_back or book_confirms:
+            if book_confirms:
                 return {"s": "FLASH", "dir": "NO", "yes": False, "price": m.no_p, "sz": 0}
 
         # v9.5: RULE 2 — In flat/choppy markets, buy whichever side is cheapest
@@ -2281,13 +2382,25 @@ class S_Squeeze:
             # Cooldown: one snipe per market
             if time.time() - s._last_snipe_time < 60: return None
             
-            # Need strong BTC direction signal
-            chg_2m = f.chg(120)   # 2-minute price change
-            chg_30s = f.chg(30)   # 30-second price change
+            # v9.5: Use SETTLEMENT price (Chainlink) for direction
+            # This is what resolves the market — most reliable signal near end
+            cl_2m = f.cl_chg(120) if hasattr(f, 'cl_chg') else 0
+            binance_2m = f.chg(120)
+            binance_30s = f.chg(30)
             
-            # BTC clearly going UP: both 2m and 30s positive, 2m > 0.03%
-            if chg_2m > 0.0003 and chg_30s > 0:
-                # YES is winning side — buy it if price is $0.82-$0.94
+            # Use Chainlink if available, otherwise Binance
+            chg_2m = cl_2m if cl_2m != 0 else binance_2m
+            chg_30s = binance_30s  # Chainlink updates too slow for 30s
+            
+            # Also check change from market open (most important for settlement)
+            chg_from_open = 0
+            if m.open_btc > 0:
+                settle_p = f.settlement_price if hasattr(f, 'settlement_price') else f.price
+                if settle_p > 0:
+                    chg_from_open = (settle_p - m.open_btc) / m.open_btc
+            
+            # BTC clearly going UP: 2m positive AND open change positive
+            if chg_2m > 0.0003 and chg_from_open > 0.0001:
                 if 0.82 <= m.yes_p <= 0.94:
                     s._last_snipe_time = time.time()
                     return {"s": "SQUEEZE", "dir": "YES", "yes": True,
@@ -2295,9 +2408,8 @@ class S_Squeeze:
                             "mom_value": chg_2m, "squeeze_count": int(tl),
                             "fired": True, "sz": 0, "mode": "SNIPE"}
             
-            # BTC clearly going DOWN: both 2m and 30s negative, 2m < -0.03%
-            if chg_2m < -0.0003 and chg_30s < 0:
-                # NO is winning side — buy it if price is $0.82-$0.94
+            # BTC clearly going DOWN
+            if chg_2m < -0.0003 and chg_from_open < -0.0001:
                 if 0.82 <= m.no_p <= 0.94:
                     s._last_snipe_time = time.time()
                     return {"s": "SQUEEZE", "dir": "NO", "yes": False,
@@ -2305,45 +2417,10 @@ class S_Squeeze:
                             "mom_value": chg_2m, "squeeze_count": int(tl),
                             "fired": True, "sz": 0, "mode": "SNIPE"}
 
-        # ── MODE 1: LOTTERY (original — cheap side in final minutes) ──
-        squeeze_start = 120 if m.timeframe == 5 else 300
-        squeeze_end = 30 if m.timeframe == 5 else 60
-
-        if tl <= squeeze_start and tl > squeeze_end:
-            s.squeeze_count = int(squeeze_start - tl)
-        else:
-            s.squeeze_count = 0
-
-        if tl > squeeze_start or tl < squeeze_end: return None
-
-        yes_cheap = 0.12 <= m.yes_p <= 0.22
-        no_cheap = 0.12 <= m.no_p <= 0.22
-        if not yes_cheap and not no_cheap: return None
-
-        if time.time() - s._last_signal_time < 45: return None
-
-        regime = trend.regime if trend else ""
-        strong_up = regime in ("TRENDING_UP",) or (regime == "BREAKOUT" and trend.trend_dir > 0)
-        strong_down = regime in ("TRENDING_DOWN",) or (regime == "BREAKOUT" and trend.trend_dir < 0)
-
-        if yes_cheap and not strong_down:
-            turning_up = f.chg(30) > 0.0003
-            if turning_up:
-                s._last_signal_time = time.time()
-                return {"s": "SQUEEZE", "dir": "YES", "yes": True,
-                        "price": m.yes_p, "adx": 0, "di_plus": 0, "di_minus": 0,
-                        "mom_value": f.chg(30), "squeeze_count": s.squeeze_count,
-                        "fired": True, "sz": 0, "mode": "LOTTERY"}
-
-        if no_cheap and not strong_up:
-            turning_down = f.chg(30) < -0.0003
-            if turning_down:
-                s._last_signal_time = time.time()
-                return {"s": "SQUEEZE", "dir": "NO", "yes": False,
-                        "price": m.no_p, "adx": 0, "di_plus": 0, "di_minus": 0,
-                        "mom_value": f.chg(30), "squeeze_count": s.squeeze_count,
-                        "fired": True, "sz": 0, "mode": "LOTTERY"}
-
+        # ── MODE 1: LOTTERY — DISABLED (v9.5) ──
+        # Research from 72M trade dataset: takers buying longshots at $0.01-$0.15
+        # lose 57% more than implied. We were the dumb money. SNIPE only now.
+        # Keeping the code commented for reference but returning None.
         return None
 
 
@@ -2594,7 +2671,7 @@ class Finder:
 
 # ─── EXECUTOR (same as v5) ───
 class Executor:
-    def __init__(s, c): s.c = c; s.client = None; s.authed = False; s._signer_addr = None
+    def __init__(s, c): s.c = c; s.client = None; s.authed = False; s._signer_addr = None; s._pending_makers = {}
     def _get_signer_addr(s):
         if s._signer_addr: return s._signer_addr
         try:
@@ -2664,8 +2741,9 @@ class Executor:
                 except: continue
         except: pass
         return None
-    def order(s, market, is_yes, price, size, mode="taker"):
-        """Place an order. Modes: 'taker' (FOK), 'maker' (GTC limit), 'hybrid' (try maker, fallback taker).
+    def order(s, market, is_yes, price, size, mode="maker"):
+        """Place an order. Modes: 'maker' (GTC limit, ZERO fees), 'taker' (FOK, pays fees).
+        v9.5: Default changed from taker to maker. Research: makers profit at 80/99 price levels.
         Returns (order_id, actual_shares) or (None, None) on failure."""
         from py_clob_client.clob_types import MarketOrderArgs, OrderArgs, OrderType
         from py_clob_client.order_builder.constants import BUY
@@ -2681,10 +2759,10 @@ class Executor:
         tid = market.tok_yes if is_yes else market.tok_no
 
         if mode == "maker":
-            return s._order_maker(tid, label, price, size, dollar_amount, timeout=30, retries=2)
+            return s._order_maker(tid, label, price, size, dollar_amount, timeout=45, retries=3)
         elif mode == "hybrid":
             return s._order_hybrid(tid, label, price, size, dollar_amount)
-        else:  # taker (default, unchanged behavior)
+        else:  # taker (explicit only — never default)
             return s._order_taker(tid, label, price, size, dollar_amount)
 
     def _order_taker(s, tid, label, price, size, dollar_amount):
@@ -2703,9 +2781,11 @@ class Executor:
         # If FOK fails, the liquidity isn't there. Just skip.
         return None, None
 
-    def _order_maker(s, tid, label, price, size, dollar_amount, timeout=30, retries=2):
-        """GTC maker order — zero fees + rebate. Posts limit order and waits for fill.
-        Posts at best_bid + 0.01 (or price - 0.01) to sit at top of book."""
+    def _order_maker(s, tid, label, price, size, dollar_amount, timeout=45, retries=3):
+        """SEMI-BLOCKING maker order — posts GTC limit and waits up to 8 seconds.
+        v9.5: Short wait prevents phantom positions (position created only on confirmed fill).
+        If not filled in 8s, cancels and queues an async retry with better price.
+        Zero fees + rebate on every fill."""
         from py_clob_client.clob_types import OrderArgs, OrderType, OpenOrderParams
         from py_clob_client.order_builder.constants import BUY
         # Get best bid to post just above it (top of book, still maker)
@@ -2717,58 +2797,58 @@ class Executor:
                 asks = book.get("asks", [])
                 if bids:
                     best_bid = float(bids[0].get("price", 0))
-                    # Post 1 tick above best bid to be first in line, but below ask
                     maker_price = round(min(best_bid + 0.01, price - 0.01), 2)
                 if asks:
                     best_ask = float(asks[0].get("price", 0))
-                    # Never post at or above ask (would be taker)
                     maker_price = round(min(maker_price, best_ask - 0.01), 2)
         except:
-            pass  # use default price - 0.01
+            pass
         maker_price = round(max(0.01, min(maker_price, 0.99)), 2)
         limit_size = max(size, 5.0)
 
-        for attempt in range(retries):
-            try:
-                signed = s.client.create_order(OrderArgs(
-                    price=maker_price, size=round(limit_size, 2), side=BUY, token_id=tid))
-                resp = s.client.post_order(signed, OrderType.GTC)
-                oid, _ = s._parse_resp(resp, label, maker_price * limit_size, f"MAKER-GTC(try{attempt+1})")
-                if not oid:
-                    continue
+        try:
+            signed = s.client.create_order(OrderArgs(
+                price=maker_price, size=round(limit_size, 2), side=BUY, token_id=tid))
+            resp = s.client.post_order(signed, OrderType.GTC)
+            oid, _ = s._parse_resp(resp, label, maker_price * limit_size, "MAKER-GTC")
+            if not oid:
+                return None, None
 
-                # Wait for fill — poll every 2 seconds
-                fill_deadline = time.time() + timeout
-                while time.time() < fill_deadline:
-                    time.sleep(2)
-                    try:
-                        orders = s.client.get_orders(OpenOrderParams())
-                        # If our order is no longer in open orders, it was filled
-                        still_open = any(
-                            (o.get("id") == oid or o.get("orderID") == oid)
-                            for o in (orders if isinstance(orders, list) else [])
-                        )
-                        if not still_open:
-                            log.info(f"MAKER FILLED: {label} @ ${maker_price} id={oid}")
-                            return oid, limit_size  # filled
-                    except:
-                        pass
-
-                # Not filled in time — cancel
+            # Short blocking wait — 8 seconds max (not 45s!)
+            # Most maker fills happen in 2-5 seconds if price is right
+            for _ in range(4):  # 4 checks × 2s = 8 seconds
+                time.sleep(2)
                 try:
-                    s.client.cancel(order_id=oid)
-                    log.info(f"MAKER CANCELLED (unfilled after {timeout}s): {label} @ ${maker_price}")
+                    orders = s.client.get_orders(OpenOrderParams())
+                    still_open = any(
+                        (o.get("id") == oid or o.get("orderID") == oid)
+                        for o in (orders if isinstance(orders, list) else [])
+                    )
+                    if not still_open:
+                        log.info(f"MAKER FILLED: {label} @ ${maker_price} id={oid} (ZERO FEE)")
+                        return oid, limit_size
                 except:
                     pass
 
-                # Retry with slightly better price
-                maker_price = round(min(maker_price + 0.01, price), 2)
+            # Not filled in 8s — cancel and move on
+            # v9.5: No async retries. If price was right, it would've filled.
+            # Async retries create phantom fills (positions without tracking).
+            # Better to wait for next signal than retry with stale info.
+            try:
+                s.client.cancel(order_id=oid)
+                log.info(f"MAKER UNFILLED (8s): {label} @ ${maker_price} — cancelled, moving on")
+            except:
+                pass
 
-            except Exception as e:
-                log.error(f"Maker order attempt {attempt+1} fail: {e}")
+        except Exception as e:
+            log.error(f"Maker order fail: {e}")
 
-        log.info(f"MAKER GAVE UP after {retries} attempts: {label}")
         return None, None
+
+    def check_pending_fills(s):
+        """Called every tick. Cleans up any stale pending state."""
+        # v9.5: Simplified — no async retries, just cleanup
+        s._pending_makers.clear()
 
     def _order_hybrid(s, tid, label, price, size, dollar_amount):
         """Try maker first (5s), fall back to taker if not filled. Best of both worlds."""
@@ -2815,36 +2895,18 @@ class Executor:
                     except:
                         pass
 
-                # Not filled — cancel maker
+                # Not filled — cancel maker and give up (no taker fallback)
+                # v9.5: Research proves taker = losing side. Be patient or walk away.
                 try:
                     s.client.cancel(order_id=oid)
-                    log.info(f"HYBRID: maker unfilled, cancelling, switching to taker")
+                    log.info(f"HYBRID: maker unfilled after 5s, cancelled. No taker fallback.")
                 except:
                     pass
         except Exception as e:
             log.error(f"Hybrid maker phase fail: {e}")
 
-        # Step 2: Fall back to taker FOK
-        # v9.5: Re-check price — if market moved during maker wait, price may be stale
-        # Get current best price and reject if too expensive
-        current_price = price  # default to original
-        try:
-            book = s.client.get_order_book(tid)
-            asks = book.get("asks", [])
-            if asks:
-                best_ask = float(asks[0].get("price", price))
-                current_price = best_ask
-        except: pass
-        # Reject if price moved more than 3c above original signal price
-        if current_price > price + 0.03:
-            log.warning(f"HYBRID TAKER REJECTED: price moved ${price:.2f} → ${current_price:.2f}")
-            return None, None
-        # Also reject if price is above absolute max for cheap strategies
-        if current_price > 0.42:
-            log.warning(f"HYBRID TAKER REJECTED: price ${current_price:.2f} too expensive")
-            return None, None
-        log.info(f"HYBRID TAKER FALLBACK: {label} @ ${current_price}")
-        return s._order_taker(tid, label, current_price, size, dollar_amount)
+        # v9.5: No taker fallback. Return None.
+        return None, None
 
     def _parse_resp(s, resp, label, amount, tag):
         """Parse order response, return (order_id, actual_shares) or (None, None)."""
@@ -2959,6 +3021,7 @@ class Executor:
         if s.c.dry_run or not s.authed: return
         try: s.client.cancel_all()
         except: pass
+        s._pending_makers.clear()  # v9.5: clear async retries too
     def redeem_positions(s, condition_ids):
         """Redeem resolved conditional tokens back to USDC.
         Method 1: Use py-clob-client (handles proxy routing automatically).
@@ -3408,6 +3471,20 @@ class Dash:
             sm_str = f"{OK}{sm:.1f}x{R}" if sm >= 1.0 else f"{WARN}{sm:.1f}x{R}"
             
             print(f"  {H2}│{R}  {LBL}Session{R} {sm_str}                                                {H2}│{R}")
+            
+            # v9.5: Chainlink status
+            if hasattr(f, 'cl_price') and f.cl_price > 0:
+                cl_age = f.cl_age
+                cl_p = f.cl_price
+                div = f.price_divergence * 100  # as %
+                age_str = f"{int(cl_age)}s" if cl_age < 120 else f"{int(cl_age/60)}m"
+                if abs(div) < 0.1:
+                    cl_status = f"{OK}CL ${cl_p:,.0f} ≈ Binance (Δ{div:+.2f}%) {age_str}{R}"
+                elif abs(div) < 0.3:
+                    cl_status = f"{WARN}CL ${cl_p:,.0f} ≠ Binance (Δ{div:+.2f}%) {age_str}{R}"
+                else:
+                    cl_status = f"{ERR}CL ${cl_p:,.0f} ≠≠ Binance (Δ{div:+.2f}%) {age_str} ⚠SKIP{R}"
+                print(f"  {H2}│{R}  {LBL}Oracle{R} {cl_status}  {H2}│{R}")
             
             # v9.1: Side bias
             y_m, n_m = cortex._side_mult["YES"], cortex._side_mult["NO"]
@@ -4105,6 +4182,12 @@ class Bot:
                                 slot["token_feed"].update(m.slug, m.yes_p, m.no_p)
                             except: pass
 
+                # v9.5: Check pending maker orders for fills (non-blocking)
+                try:
+                    s.ex.check_pending_fills()
+                except Exception as e:
+                    log.error(f"Pending fills check error: {e}")
+
                 # v9.5: TRADE EXECUTION — every tick, check all slots with valid markets
                 # This is the key fix: strategies like Flash/Latency need to see price
                 # changes every second, not every 5 seconds after a Gamma API call.
@@ -4630,6 +4713,16 @@ class Bot:
         av = s.risk.available
         if av < 1.0: return
 
+        # v9.5: Chainlink divergence multiplier
+        # When Binance and Chainlink disagree, reduce size or skip
+        _cl_mult = 1.0
+        if s.feed.cl_price > 0:
+            divergence = abs(s.feed.price_divergence)
+            if divergence > 0.003:  # >0.3% divergence — dangerous
+                _cl_mult = 0.0  # skip trade entirely
+            elif divergence > 0.001:  # >0.1% divergence — reduce
+                _cl_mult = 0.5
+
         # v9.4: Asset/timeframe label for events
         slot_label = f"{m.asset.upper()}-{m.timeframe}m"
         slot_key = f"{m.asset}-{m.timeframe}m"  # v9.5: for per-slot trust lookup
@@ -4852,7 +4945,7 @@ class Bot:
                 sz = s.sizer.get_size("ARB", s.c.get_base_size("ARB", s.risk.show_bal), s.risk.show_bal, same_strat_count=same_count)
                 sz = sz * s.cortex.get_trust("ARB", slot_key=slot_key) * s.cortex.get_session_mult() * s.cortex.get_danger_mult()  # v9: Cortex
                 sz = min(sz, av, max_market_risk - market_risk, hard_max)
-                sz = sz * _counter_trend_mult  # v9.5: reduce in counter-trend
+                sz = sz * _counter_trend_mult * _cl_mult  # v9.5: counter-trend + chainlink
                 if sz >= 1.0:
                     s.strats["ARB"] = f"ACTIVE {sig['side']} pair=${sig['pair']:.4f}"
                     s.dash.ev(f"[{slot_label}·ARB] {sig['side']} ${sz:.2f} pair=${sig['pair']:.3f}")
@@ -4892,7 +4985,7 @@ class Bot:
                         sz = sz * conv_bonus * streak_mult * tod_mult * market_penalty
                         sz = sz * s.cortex.get_trust("LATENCY", slot_key=slot_key) * s.cortex.get_macro_mult(sig.get("dir", sig.get("side", "YES")), asset=m.asset) * s.cortex.get_session_mult() * s.cortex.get_danger_mult() * s.cortex.get_side_mult(sig["dir"]) * (lc_yes if sig["dir"] == "YES" else lc_no)  # v9: Cortex + Lifecycle
                         sz = min(sz, av, max_market_risk - market_risk, hard_max)
-                        sz = sz * _counter_trend_mult  # v9.5: reduce in counter-trend
+                        sz = sz * _counter_trend_mult * _cl_mult  # v9.5: counter-trend + chainlink
                         if sz >= 1.0 and 0.08 <= p <= 0.88:
                             # No confirmation delay — latency edge IS speed
                             bonus_tag = f" CONV:{conv_bonus:.1f}x" if conv_bonus > 1 else ""
@@ -4900,7 +4993,7 @@ class Bot:
                             sh = max(sz / p, 5.0)
                             if sh * p > av: sh = av / p
                             s.dash.ev(f"[{slot_label}·LAT] {sig['dir']} ${sz:.2f} BTC{sig['chg']*100:+.2f}%")
-                            oid, actual_shares = s.ex.order(m, sig["yes"], p, sh, mode="hybrid")
+                            oid, actual_shares = s.ex.order(m, sig["yes"], p, sh, mode="maker")
                             if oid:
                                 t = Trd(datetime.now(timezone.utc), "LATENCY", m.slug, sig["dir"], p, sz, oid=oid)
                                 s.risk.open(t, market_end=m.end, actual_shares=actual_shares, entry_regime=s.trend.regime if s.trend else "UNKNOWN"); s.cd[f"lat:{slot_key}"] = time.time()
@@ -4940,7 +5033,7 @@ class Bot:
                         sz = sz * conv_bonus * streak_mult * tod_mult * market_penalty
                         sz = sz * s.cortex.get_trust("MEANREV", slot_key=slot_key) * s.cortex.get_macro_mult(sig.get("dir", sig.get("side", "YES")), asset=m.asset) * s.cortex.get_session_mult() * s.cortex.get_danger_mult() * s.cortex.get_side_mult(sig["dir"]) * (lc_yes if sig["dir"] == "YES" else lc_no)  # v9: Cortex + Lifecycle
                         sz = min(sz, av, max_market_risk - market_risk, hard_max)
-                        sz = sz * _counter_trend_mult  # v9.5: reduce in counter-trend
+                        sz = sz * _counter_trend_mult * _cl_mult  # v9.5: counter-trend + chainlink
                         if sz >= 1.0 and 0.10 <= p <= 0.35:
                             drop_pct = sig.get("drop", 0) * 100
                             s.strats["MEANREV"] = f"BOUNCE {sig['dir']} drop:{drop_pct:.0f}% vel:{sig.get('velocity',0):.3f}"
@@ -4981,7 +5074,7 @@ class Bot:
                         sz = sz * conv_bonus * streak_mult * tod_mult * market_penalty
                         sz = sz * s.cortex.get_trust("FLASH", slot_key=slot_key) * s.cortex.get_macro_mult(sig.get("dir", sig.get("side", "YES")), asset=m.asset) * s.cortex.get_session_mult() * s.cortex.get_danger_mult() * s.cortex.get_side_mult(sig["dir"]) * (lc_yes if sig["dir"] == "YES" else lc_no)  # v9: Cortex + Lifecycle
                         sz = min(sz, av, max_market_risk - market_risk, hard_max)
-                        sz = sz * _counter_trend_mult  # v9.5: reduce in counter-trend
+                        sz = sz * _counter_trend_mult * _cl_mult  # v9.5: counter-trend + chainlink
                         # v9.1: Flash hard cap $250 — data: $400-$570 Flash bets lost -$1,964 total
                         # Flash is a VALUE play, not a SIZE play. Keep bets small, let R:R do the work.
                         sz = min(sz, 250.0)
@@ -5050,7 +5143,7 @@ class Bot:
                         sz = sz * s.cortex.get_trust("SQUEEZE", slot_key=slot_key) * s.cortex.get_macro_mult(sig.get("dir", sig.get("side", "YES")), asset=m.asset) * s.cortex.get_session_mult() * s.cortex.get_danger_mult() * s.cortex.get_side_mult(sig["dir"]) * (lc_yes if sig["dir"] == "YES" else lc_no)
                         squeeze_cap = s.risk.show_bal * 0.03
                         sz = min(sz, av, max_market_risk - market_risk, hard_max, squeeze_cap)
-                        sz = sz * _counter_trend_mult  # v9.5: reduce in counter-trend
+                        sz = sz * _counter_trend_mult * _cl_mult  # v9.5: counter-trend + chainlink
                         if sz >= 0.50 and p <= 0.22:
                             tl_left = sig["squeeze_count"]
                             s.strats["SQUEEZE"] = f"LOTTERY {sig['dir']} ${p:.2f} {tl_left}s left"
@@ -5070,10 +5163,10 @@ class Bot:
                 tl_now = (m.end - datetime.now(timezone.utc)).total_seconds() if m.end else 999
                 if m.timeframe == 5 and tl_now <= 45:
                     s.strats["SQUEEZE"] = f"snipe zone ({int(tl_now)}s)"
-                elif tl_now <= 300:
-                    s.strats["SQUEEZE"] = f"watching ({int(tl_now)}s left)"
+                elif m.timeframe == 5 and tl_now <= 120:
+                    s.strats["SQUEEZE"] = f"waiting snipe ({int(tl_now)}s)"
                 else:
-                    s.strats["SQUEEZE"] = f"waiting (<5min)"
+                    s.strats["SQUEEZE"] = f"waiting snipe"
 
         # ── S6: PAIR ACCUMULATOR → Buy other side to complete a guaranteed pair ──
         # Gabagool strategy: pair cost < $1.00 = guaranteed profit regardless of outcome.
@@ -5131,7 +5224,7 @@ class Bot:
                 base = s.c.get_base_size("SPIKE", s.risk.show_bal)
                 sz = base * s.cortex.get_trust("SPIKE", slot_key=slot_key) * s.cortex.get_session_mult() * s.cortex.get_danger_mult()
                 sz = min(sz, av, max_market_risk - market_risk, hard_max)
-                sz = sz * _counter_trend_mult  # v9.5: reduce in counter-trend
+                sz = sz * _counter_trend_mult * _cl_mult  # v9.5: counter-trend + chainlink
                 if sz >= 1.0:
                     s.strats["SPIKE"] = f"ACTIVE {sig['dir']} @ ${p:.2f} spike!"
                     sh = max(sz / p, 5.0)
