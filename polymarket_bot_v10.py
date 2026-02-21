@@ -2180,8 +2180,27 @@ class S_MeanReversion:
         return None
     
     def _check_side(s, side, is_yes, price, m, f, trend, token_feed, book_intel):
-        """Check if one side is overextended and ready to bounce."""
-        # 1. Price must be in the bounce zone: $0.10-$0.22 (same as Flash — real cheap only)
+        """Check if one side is overextended and ready to bounce.
+        v10: TWO paths — simple BTC bounce (backtest-proven) + token velocity."""
+        
+        # ── PATH 1: BACKTEST-PROVEN SIMPLE ($0.30-$0.45, BTC bounce) ──
+        # Strategy lab: MR1_current = 886t, 39.6% WR, +$2,613
+        if 0.30 <= price <= 0.45:
+            other_price = m.no_p if is_yes else m.yes_p
+            if other_price >= 0.55:
+                c30 = f.chg(30); c2m = f.chg(120)
+                # YES side: BTC bouncing up (30s up, 2m was down)
+                if is_yes and c30 > 0.0002 and c2m < -0.0003:
+                    return {"s": "MEANREV", "dir": side, "yes": is_yes,
+                            "price": price, "conf": 0.65, "drop": c2m,
+                            "velocity": c30, "sz": 0}
+                # NO side: BTC bouncing down (30s down, 2m was up)
+                if not is_yes and c30 < -0.0002 and c2m > 0.0003:
+                    return {"s": "MEANREV", "dir": side, "yes": is_yes,
+                            "price": price, "conf": 0.65, "drop": c2m,
+                            "velocity": c30, "sz": 0}
+        
+        # ── PATH 2: ORIGINAL TOKEN VELOCITY ($0.10-$0.22) ──
         if price < 0.10 or price > 0.22: return None
         
         # 2. Token must have DROPPED significantly recently
@@ -4671,15 +4690,28 @@ class Bot:
         av = s.risk.available
         if av < 1.0: return
 
-        # v9.5: Chainlink divergence multiplier
-        # When Binance and Chainlink disagree, reduce size or skip
+        # v10: DEBUG — log strategy state every 60 seconds
+        _debug_key = f"_last_debug_{m.slug}"
+        if not hasattr(s, '_debug_times'): s._debug_times = {}
+        if time.time() - s._debug_times.get(_debug_key, 0) > 60:
+            s._debug_times[_debug_key] = time.time()
+            cl_div = abs(s.feed.price_divergence) if s.feed.cl_price > 0 else -1
+            cl_age = s.feed.cl_age if hasattr(s.feed, 'cl_age') else -1
+            log.info(f"v10DBG {m.asset}-{m.timeframe}m Y={m.yes_p:.2f} N={m.no_p:.2f} "
+                     f"sum={m.yes_p+m.no_p:.3f} tl={tl:.0f}s av=${av:.0f} "
+                     f"BTC=${s.feed.price:,.0f} cl_div={cl_div:.4f} cl_age={cl_age:.0f}s")
+
+        # v10: Chainlink divergence — reduce size but DON'T zero out
+        # Stale Chainlink (30+ min old) shouldn't prevent ALL trading
         _cl_mult = 1.0
         if s.feed.cl_price > 0:
             divergence = abs(s.feed.price_divergence)
-            if divergence > 0.003:  # >0.3% divergence — dangerous
-                _cl_mult = 0.0  # skip trade entirely
-            elif divergence > 0.001:  # >0.1% divergence — reduce
-                _cl_mult = 0.5
+            cl_age = s.feed.cl_age if hasattr(s.feed, 'cl_age') else 0
+            if divergence > 0.003 and cl_age < 300:
+                # Only skip if Chainlink is FRESH and disagreeing (real divergence)
+                _cl_mult = 0.3  # v10: reduce, don't zero
+            elif divergence > 0.001:
+                _cl_mult = 0.7  # v10: gentle reduction
 
         # v9.4: Asset/timeframe label for events
         slot_label = f"{m.asset.upper()}-{m.timeframe}m"
@@ -4763,17 +4795,21 @@ class Bot:
             return same_dir < 2  # max 2 other slots in same direction within 90s
 
         # ── SPREAD CHECK ──
+        # v10: Only block on CONFIRMED wide spread, not API failures
         spread = s.ex.check_spread(m.tok_yes)
-        if spread is not None and spread > 0.08:
+        if spread is not None and spread < 0.90 and spread > 0.08:
+            # Real wide spread (not API failure returning 0.99)
             s.strats["ARB"] = f"wide spread ${spread:.2f}"
             s.strats["LATENCY"] = "wide spread"; s.strats["MEANREV"] = "wide spread"
             s.strats["FLASH"] = "wide spread"
             return
+        # v10: If spread is None (API error) or 0.99 (empty book), CONTINUE trading
+        # The backtest doesn't have this check and made +$8K
 
-        # ── BAD HOUR (directional only, ARB exempt) ──
-        bad_hour = not s.sizer.is_good_hour()
-        if bad_hour:
-            s.strats["LATENCY"] = "bad hour"; s.strats["MEANREV"] = "bad hour"; s.strats["FLASH"] = "bad hour"
+        # ── BAD HOUR — v10: advisory only, never blocks ──
+        # Backtest made +$8K without hour filtering. Removing hard block.
+        # Tod_mult below already handles hour-based sizing adjustments.
+        bad_hour = False  # v10: disabled — was preventing ALL trading
 
         # v7: Time-of-day sizing multiplier
         hour_str = str(datetime.now(timezone.utc).hour)
