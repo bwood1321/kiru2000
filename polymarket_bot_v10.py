@@ -2614,14 +2614,18 @@ class Finder:
         interval = timeframe  # 5 or 15
         cache_key = f"{asset}-{timeframe}m"
         # v9.5: Check cache FIRST — avoid unnecessary API calls
-        # 5 slots × 4 offsets = 20 API calls per cycle without this
         cached = s.cache.get(cache_key)
         if cached:
             tl = (cached.end - now).total_seconds()
             if tl > 30 and cached.active: return cached
+            # v10.1: Cache is stale — clear it so we search fresh
+            if tl <= 30:
+                s.cache.pop(cache_key, None)
         mb = (now.minute // interval) * interval
         base = now.replace(minute=mb, second=0, microsecond=0)
-        offsets = [0, -interval, interval, -interval*2]
+        # v10.1: More offsets — try harder to find markets
+        # Old: [0, -interval, interval, -2*interval] → missed markets in transition
+        offsets = [0, -interval, interval, -interval*2, interval*2]
         for off in offsets:
             ts = int((base + timedelta(minutes=off)).timestamp())
             slug = f"{asset}-updown-{timeframe}m-{ts}"
@@ -4139,6 +4143,11 @@ class Bot:
                     for slot_key, slot in s.slot_state.items():
                         asset, tf = slot["asset"], slot["tf"]
                         m = s.finder.find(asset, tf)
+                        if not m:
+                            # v10.1: Log when market discovery FAILS
+                            if ctr % 25 == 0:
+                                log.warning(f"v10FIND {slot_key}: finder returned None — no active {asset}-{tf}m market")
+                            continue
                         if m:
                             s.conn.gamma = "OK"
                             try:
@@ -4184,17 +4193,37 @@ class Bot:
                 # v9.5: TRADE EXECUTION — every tick, check all slots with valid markets
                 # This is the key fix: strategies like Flash/Latency need to see price
                 # changes every second, not every 5 seconds after a Gamma API call.
+                _any_traded = False
                 for slot_key, slot in s.slot_state.items():
                     sm = slot.get("market")
-                    if not sm: continue
+                    if not sm:
+                        if ctr % 50 == 0:
+                            log.warning(f"v10STALL {slot_key}: no market found")
+                        continue
                     tl = (sm.end - datetime.now(timezone.utc)).total_seconds()
-                    if tl < 10: continue  # market about to expire
+                    if tl < 10:
+                        if ctr % 50 == 0:
+                            log.warning(f"v10STALL {slot_key}: market expired (tl={tl:.0f}s) slug={sm.slug[-20:]}")
+                        continue  # market about to expire
+                    _any_traded = True
                     s._set_slot_context(slot)
                     try:
                         if s.conn.can_trade or s.c.dry_run: s._trade(sm)
                     except Exception as e:
                         log.error(f"Trade error on {slot_key}: {e}")
                         s.dash.ev(f"Trade err: {slot_key}")
+                
+                # v10.1: STALL DETECTOR — if no slots had tradeable markets, log it
+                if not _any_traded and ctr % 15 == 0:
+                    slot_status = {}
+                    for sk, sl in s.slot_state.items():
+                        sm = sl.get("market")
+                        if sm:
+                            tl = (sm.end - datetime.now(timezone.utc)).total_seconds()
+                            slot_status[sk] = f"tl={tl:.0f}s slug={sm.slug[-15:]}"
+                        else:
+                            slot_status[sk] = "NO MARKET"
+                    log.warning(f"v10STALL NO TRADEABLE MARKETS: {slot_status}")
                 if ctr % 30 == 0 and s.ex.authed:
                     rb = s.ex.get_balance()
                     if rb: s.risk.set_real(rb)
