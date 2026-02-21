@@ -3326,7 +3326,8 @@ class Dash:
             _sn = _hb.get("scans", 0)
             if _sa < 0: hb = f"{WARN}◌ starting{R}"
             elif _sa < 10: hb = f"{OK}● live{R}"
-            elif _sa < 60: hb = f"{VAL}● ok{R}"
+            elif _sa < 30: hb = f"{VAL}● ok {_sa}s{R}"
+            elif _sa < 120: hb = f"{WARN}● slow {_sa}s{R}"
             else: hb = f"{ERR}○ stall {_sa}s{R}"
             if _ta > 0 and _ta < 300: tt = f"{OK}⚡{_ta}s{R}"
             elif _tn > 0: tt = f"{DIM}{_ta//60}m{R}"
@@ -4002,6 +4003,8 @@ class Bot:
                 # This is the key fix: strategies like Flash/Latency need to see price
                 # changes every second, not every 5 seconds after a Gamma API call.
                 _any_traded = False
+                s._hb_last_scan = time.time()  # v11.1: heartbeat at loop level, not inside _trade
+                s._hb_scans += 1
                 for slot_key, slot in s.slot_state.items():
                     sm = slot.get("market")
                     if not sm:
@@ -4601,8 +4604,7 @@ class Bot:
         # v11 STATE LOG — every 30s, shows WHY bot isn't trading
         if not hasattr(s, '_state_times'): s._state_times = {}
         _st_key = f"_st_{m.slug}"
-        s._hb_last_scan = time.time()  # v11 heartbeat: mark scan
-        s._hb_scans += 1
+        # v11.1: heartbeat tracking moved to main loop level
         if time.time() - s._state_times.get(_st_key, 0) > 30:
             s._state_times[_st_key] = time.time()
             market_penalty = s.market_losses.get_penalty(m.slug)
